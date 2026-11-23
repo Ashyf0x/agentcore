@@ -42,6 +42,12 @@ class AppWorldBenchmark(Benchmark, BaseModel):
     env_kwargs: dict[str, Any] = Field(default_factory=dict)
     max_interactions: int = 200
     tool_name_separator: Literal[".", "__"] = "__"
+    # ``full`` injects every AppWorld API as a named tool (468 tools, ~274K chars
+    # of parameter schemas). ``on_demand`` exposes only the four official
+    # ``api_docs`` discovery tools plus one generic executor, so the model reads
+    # a schema only for APIs it actually needs. Keep ``full`` as the default:
+    # the 2026-11-14 v2 runs were produced with it and must stay reproducible.
+    tool_schema_mode: Literal["full", "on_demand"] = "full"
     SCORES_FILE_NAME: ClassVar[str] = "scores.json"
 
     def list_subsets(self) -> list[str]:  # type: ignore[override]
@@ -55,5 +61,6 @@ class AppWorldBenchmark(Benchmark, BaseModel):
             "env_kwargs": self.env_kwargs,
             "max_interactions": self.max_interactions,
             "tool_name_separator": self.tool_name_separator,
+            "tool_schema_mode": self.tool_schema_mode,
             "use_cache": self.use_cache,
         }

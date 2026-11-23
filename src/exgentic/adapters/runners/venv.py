@@ -19,9 +19,10 @@ import os
 import shutil
 import signal
 import subprocess
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from ...environment.venv import _venv_bin_dir, _venv_python, _venv_script
 
 if TYPE_CHECKING:
     from ...core.context import Role
@@ -50,6 +51,27 @@ def _uv(*args: str, check: bool = True, **kwargs: Any) -> subprocess.CompletedPr
         stdout = getattr(result, "stdout", "") or ""
         raise RuntimeError(f"uv {' '.join(args[:3])} failed (exit {result.returncode}):\n{stderr}\n{stdout}")
     return result
+
+
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Terminate *proc* and its descendants on Windows.
+
+    ``os.killpg`` does not exist on Windows and ``start_new_session`` is a
+    no-op, so the runner's subprocess is not a group leader. ``taskkill /T``
+    walks the parent/child links instead, which is what actually reaps the
+    grandchildren (per-session LiteLLM proxies, MCP servers).
+    """
+    if proc.poll() is not None:
+        return
+    subprocess.run(
+        ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+        capture_output=True,
+        check=False,
+    )
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
 
 
 class VenvRunner:
@@ -91,6 +113,8 @@ class VenvRunner:
         self._health_timeout = health_timeout or _HEALTH_TIMEOUT
         self._role = role
         self._process: subprocess.Popen | None = None
+        self._log_file: Any = None
+        self._log_path: Path | None = None
 
     # ── venv handling ─────────────────────────────────────────────────
 
@@ -102,10 +126,7 @@ class VenvRunner:
 
     def _venv_python(self) -> Path:
         """Return the path to the Python binary inside the venv."""
-        venv = self._get_venv_dir()
-        if sys.platform == "win32":
-            return venv / "Scripts" / "python.exe"
-        return venv / "bin" / "python"
+        return _venv_python(self._get_venv_dir())
 
     def _ensure_venv(self) -> Path:
         """Ensure the venv exists via EnvironmentManager."""
@@ -155,14 +176,14 @@ class VenvRunner:
         # Build a filtered environment (same filtering as DockerRunner).
         env = prepare_subprocess_env()
         env["VIRTUAL_ENV"] = str(venv)
-        venv_bin = str(venv / "bin")
+        venv_bin = str(_venv_bin_dir(venv))
         # Prepend venv bin to the *system* PATH so external tools (docker,
         # git, …) remain reachable from within the venv subprocess.
         system_path = os.environ.get("PATH", "")
         env["PATH"] = venv_bin + os.pathsep + system_path
         inject_exgentic_env(env, role=self._role)
 
-        exgentic_bin = self._get_venv_dir() / "bin" / "exgentic"
+        exgentic_bin = _venv_script(venv, "exgentic")
         cmd = [
             str(exgentic_bin),
             "serve",
@@ -176,11 +197,24 @@ class VenvRunner:
             str(self._port),
         ]
 
+        # A PIPE that nobody drains deadlocks as soon as the service writes
+        # more than the kernel pipe buffer (64 KiB here): the happy path never
+        # calls communicate(), so the child blocks forever in write(). Observed
+        # with AppWorld, which prints its API docs on startup -- the serve
+        # process sat in `anon_pipe_write` with a constant 730 MB RSS. Stream
+        # to a per-service log file instead: no back-pressure, and the output
+        # stays available for post-mortem debugging.
+        log_dir = self._get_venv_dir().parent / "serve-logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        role = getattr(self._role, "value", self._role) or "service"
+        self._log_path = log_dir / f"{role}-{self._port}.log"
+        self._log_file = self._log_path.open("ab", buffering=0)
+
         self._process = subprocess.Popen(
             cmd,
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=self._log_file,
+            stderr=subprocess.STDOUT,
             start_new_session=True,
         )
         atexit.register(self._stop_process)
@@ -190,17 +224,21 @@ class VenvRunner:
             _wait_for_health(url, timeout=self._health_timeout)
         except TimeoutError:
             proc = self._process
-            stdout, stderr = b"", b""
             if proc is not None:
                 try:
-                    stdout, stderr = proc.communicate(timeout=1)
+                    proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
+                    pass
+            tail = ""
+            if self._log_path is not None:
+                try:
+                    tail = self._log_path.read_bytes()[-8000:].decode(errors="replace")
+                except OSError:
                     pass
             self._stop_process()
             raise TimeoutError(
                 f"Venv service did not become healthy within {self._health_timeout}s.\n"
-                f"stdout:\n{stdout.decode(errors='replace')}\n"
-                f"stderr:\n{stderr.decode(errors='replace')}"
+                f"serve log ({self._log_path}):\n{tail}"
             ) from None
 
         # Liveness callable so RPCs fail fast if the venv subprocess
@@ -215,6 +253,13 @@ class VenvRunner:
         return proxy
 
     def _stop_process(self) -> None:
+        log_file = self._log_file
+        self._log_file = None
+        if log_file is not None:
+            try:
+                log_file.close()
+            except OSError:
+                pass
         if self._process is None:
             return
         proc = self._process
@@ -223,6 +268,13 @@ class VenvRunner:
         # its own process group. Signal the whole group so grandchildren
         # (per-session LiteLLM proxies, docker helpers, MCP servers) are
         # cleaned up atomically instead of orphaning.
+        #
+        # Windows has neither process groups in this sense nor killpg, and
+        # start_new_session is a no-op there, so fall back to terminating the
+        # tree explicitly.
+        if os.name == "nt":
+            _kill_process_tree(proc)
+            return
         try:
             pgid = os.getpgid(proc.pid)
         except (OSError, ProcessLookupError):

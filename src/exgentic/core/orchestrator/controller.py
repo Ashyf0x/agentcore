@@ -15,6 +15,8 @@ from .termination import (
     InvalidObservationError,
 )
 
+from ...observers.handlers.session_refs import local_session_id
+
 
 class Controller:
     def on_run_success(self, results, run_config) -> None:
@@ -66,7 +68,13 @@ class LimitController(Controller):
     def on_react_success(self, session, action) -> None:
         if not isinstance(action, Action):
             return
-        session_id = session.session_id
+        # ``local_session_id`` rather than ``session.session_id``: a
+        # venv-backed session answers that read with an HTTP round-trip, and
+        # this runs on *every* action.  A peer that died mid-session would
+        # otherwise raise through the tracker into the executor -- and
+        # controllers are not covered by the observer guard, so nothing
+        # downstream would contain it.
+        session_id = local_session_id(session)
         action_count = len(action.to_action_list())
         with self._lock:
             state = self._counts.get(session_id)
@@ -79,7 +87,7 @@ class LimitController(Controller):
     def on_step_success(self, session, observation) -> None:
         if observation is None:
             return
-        session_id = session.session_id
+        session_id = local_session_id(session)
         with self._lock:
             state = self._counts.get(session_id)
         if state is None:

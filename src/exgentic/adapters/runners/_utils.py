@@ -91,6 +91,33 @@ _FORWARD_PREFIXES = (
     "LITELLM_",
     "OTEL_",
 )
+# Windows needs these to start a Python process at all. Without SystemRoot,
+# importing asyncio fails in the child with
+# ``OSError: [WinError 10106] The service provider could not be loaded or
+# initialized`` because Winsock cannot find its provider DLLs. Forwarding them
+# is not optional, and on POSIX this list is empty.
+_WINDOWS_REQUIRED_VARS = (
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PUBLIC",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "TEMP",
+    "TMP",
+    "USERNAME",
+    "USERDOMAIN",
+    "COMPUTERNAME",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "PROCESSOR_IDENTIFIER",
+)
 
 
 def prepare_subprocess_env() -> dict[str, str]:
@@ -101,10 +128,18 @@ def prepare_subprocess_env() -> dict[str, str]:
     :data:`_FORWARD_PREFIXES`).  Exgentic context and settings travel
     via ``runtime.json`` (see :func:`inject_exgentic_env`), so no
     ``EXGENTIC_*`` vars need to be forwarded here.
+
+    Windows system variables are forwarded as well: an allowlist of
+    provider credentials alone does not produce a usable process there.
     """
     import os
 
-    return {k: v for k, v in os.environ.items() if k.endswith(_FORWARD_SUFFIXES) or k.startswith(_FORWARD_PREFIXES)}
+    env = {k: v for k, v in os.environ.items() if k.endswith(_FORWARD_SUFFIXES) or k.startswith(_FORWARD_PREFIXES)}
+    if os.name == "nt":
+        merged = {k: os.environ[k] for k in _WINDOWS_REQUIRED_VARS if k in os.environ}
+        merged.update(env)
+        env = merged
+    return env
 
 
 def inject_exgentic_env(env: dict[str, str], role: Role | None = None) -> None:

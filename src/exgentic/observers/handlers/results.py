@@ -6,9 +6,11 @@ import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ... import __version__ as exgentic_version
+from ...core.orchestrator.failures import is_infra_failure
 from ...core.orchestrator.observer import Observer
 from ...core.orchestrator.termination import (
     AgentError,
@@ -32,6 +34,7 @@ from ...core.types import (
 from ...interfaces.registry import get_agent_entries, get_benchmark_entries
 from ...utils.cost import CostReport, accumulate_reports
 from .session_ledger import SessionLedger
+from .session_refs import local_session_id, local_task_id
 
 
 @dataclass
@@ -40,6 +43,21 @@ class _SessionData:
     invalid_action_count: int = 0
     agent: Any | None = None
     reason: Optional[str] = None
+
+
+def _cost_or_empty(session) -> CostReport:
+    """Ask the session for its cost, tolerating a peer that is gone.
+
+    ``session.get_cost()`` is an RPC on a venv-backed session.  This runs in
+    the *completion* path, i.e. exactly when the session may have just died,
+    so an unanswered call must not be allowed to abort the run -- the cost of
+    one unscorable session is unknown, not fatal.
+    """
+    try:
+        return session.get_cost()
+    except Exception:  # noqa: BLE001 -- transport gone, or peer has no cost
+        return CostReport.initialize_empty()
+
 
 
 class ResultsObserver(Observer):
@@ -60,7 +78,7 @@ class ResultsObserver(Observer):
             self._run_id = run_config.run_id
 
     def on_session_start(self, session, agent, observation) -> None:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         self._ledger.register(session_id)
         with self._lock:
             self._sessions[session_id] = _SessionData(agent=agent)
@@ -114,15 +132,41 @@ class ResultsObserver(Observer):
             error_source = "agent"
         elif isinstance(error, BenchmarkError):
             error_source = "benchmark"
+        root_error = error.error if isinstance(error, (AgentError, BenchmarkError)) else None
+        # Either side may distinguish its own faults from infrastructure
+        # faults (agentcore does: ``infra`` vs ``agent``; the orchestrator's
+        # scoring guard does it for benchmark-side teardown errors). Only
+        # ``infra`` is adopted here -- it changes the displayed cause, not the
+        # outcome: both land in ``SessionOutcomeStatus.ERROR`` and neither is
+        # scored. Anything else keeps the exception-type-based guess above.
+        if getattr(root_error, "error_source", None) == "infra":
+            error_source = "infra"
+        elif root_error is not None and is_infra_failure(root_error):
+            # The label above says which side *raised*, not what went wrong: a
+            # transport timeout surfaces on the agent's RPC path, gets wrapped
+            # in ``AgentError``, and inherits "agent" -- which reads as "the
+            # agent's logic failed" and is simply false. The builtin
+            # ``TimeoutError`` carries no ``error_source`` attribute, so the
+            # branch above cannot catch it.
+            #
+            # Measured on the 2026-11-14 runs: all 24 sessions whose entire
+            # error message was "timed out" had run past the 600 s transport
+            # timeout, so every one of them was a dead RPC, not a bad decision.
+            # Reuse the orchestrator's predicate rather than inventing a second
+            # one -- if the two ever disagreed, the same failure would be
+            # labelled differently depending on who caught it.
+            error_source = "infra"
+        # Resolve the reason after the label is final, so the text matches it.
         if isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             self._set_reason(session, "cancelled by user")
             error_source = "cancelled"
+        elif error_source == "infra":
+            self._set_reason(session, "terminated by infrastructural exception")
         else:
             self._set_reason(
                 session,
                 "terminated by unexpected exception (see console)",
             )
-        root_error = error.error if isinstance(error, (AgentError, BenchmarkError)) else None
         error_message = str(root_error) if root_error else str(error)
         session_metadata = {"error": error_message}
         if error_source is not None:
@@ -160,7 +204,7 @@ class ResultsObserver(Observer):
             self._session_results.append(session_results)
 
     def _record_action(self, session, action: Action) -> int:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         single_actions = action.to_action_list()
         total_actions = len(single_actions)
         invalid_actions = 0
@@ -178,14 +222,14 @@ class ResultsObserver(Observer):
             data.action_count += total_actions
             data.invalid_action_count += invalid_actions
         agent_cost, benchmark_cost = self._get_cost_snapshot(session_id, session)
-        traj_path = session.paths.trajectory
+        traj_path = self._trajectory_path(session_id)
         traj_path.parent.mkdir(parents=True, exist_ok=True)
         event = {
             "event": "action",
             "run_id": self._run_id,
             "session_id": session_id,
             "session_number": session_number,
-            "task_id": session.task_id,
+            "task_id": local_task_id(session),
             "step": step_n,
             "action": json.loads(action.model_dump_json()),
             "initial": False,
@@ -205,11 +249,11 @@ class ResultsObserver(Observer):
         step: Optional[int] = None,
         initial: bool = False,
     ) -> None:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.get_number(session_id)
         step_n = self._ledger.get_steps(session_id) if step is None else step
         agent_cost, benchmark_cost = self._get_cost_snapshot(session_id, session)
-        traj_path = session.paths.trajectory
+        traj_path = self._trajectory_path(session_id)
         traj_path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.loads(observation.model_dump_json()) if observation is not None else None
         event = {
@@ -217,7 +261,7 @@ class ResultsObserver(Observer):
             "run_id": self._run_id,
             "session_id": session_id,
             "session_number": session_number,
-            "task_id": session.task_id,
+            "task_id": local_task_id(session),
             "step": step_n,
             "observation": payload,
             "initial": initial,
@@ -229,7 +273,7 @@ class ResultsObserver(Observer):
             f.write("\n")
 
     def _record_session(self, session, score: SessionScore, *, agent=None) -> None:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         with self._lock:
             data = self._sessions.get(session_id)
         state = self._ledger.pop_state(session_id)
@@ -241,11 +285,15 @@ class ResultsObserver(Observer):
         value = score.score
         is_finished = score.is_finished
         agent_cost_report = agent.get_cost() if agent is not None else CostReport.initialize_empty()
-        benchmark_cost_report = session.get_cost()
+        benchmark_cost_report = _cost_or_empty(session)
         status = self._resolve_session_status(score)
-        from .session_timings import get_session_llm_timings
-
-        llm_durations = get_session_llm_timings().pop(session_id)
+        llm_durations = self._llm_durations(session_id, agent)
+        # Popped before building the record: the reason is the human-readable
+        # cause ("cancelled by user", "terminated by infrastructural
+        # exception") and belongs in ``details``. It used to be popped and
+        # thrown away after the record was built, so every session reported a
+        # status with no explanation for it.
+        reason = self._pop_reason(session)
         tr = SessionResults(
             session_id=session_id,
             success=success,
@@ -260,14 +308,13 @@ class ResultsObserver(Observer):
             execution_time=execution_time,
             llm_time=sum(llm_durations),
             llm_call_count=len(llm_durations),
-            details=score.model_dump(),
+            details={**score.model_dump(), "reason": reason},
             cost_reports={
                 "agent": agent_cost_report,
                 "benchmark": benchmark_cost_report,
             },
-            task_id=session.task_id,
+            task_id=local_task_id(session),
         )
-        self._pop_reason(session)
         with self._lock:
             self._session_results.append(tr)
             if session_id in self._sessions:
@@ -286,6 +333,34 @@ class ResultsObserver(Observer):
                     f.write(f"source: {error_source}\n")
                 f.write(str(error_message))
 
+    def _llm_durations(self, session_id: str, agent) -> list[float]:
+        """Per-call model latency for this session, from whichever side measured it.
+
+        Two sources, because agents reach the model two ways:
+
+        * ``SessionLLMTimings`` -- a process-local accumulator the LiteLLM trace
+          logger writes into. Correct for any agent that calls LiteLLM.
+        * ``agent.get_llm_timings()`` -- the agent's own measurement, for agents
+          that bypass LiteLLM. ``agentcore`` talks ``httpx`` straight to the
+          endpoint, so the trace logger never fires and the accumulator stayed
+          empty; those runs reported ``llm_time=0`` with 530 calls on record.
+
+        The agent's own numbers win when present: it measured the calls it
+        actually made, while the accumulator is shared and only ever a subset.
+        """
+        from .session_timings import get_session_llm_timings
+
+        accumulated = get_session_llm_timings().pop(session_id)
+        if agent is None:
+            return accumulated
+        try:
+            reported = agent.get_llm_timings()
+        except Exception:  # noqa: BLE001 -- an agent that cannot answer is not fatal
+            return accumulated
+        if not reported:
+            return accumulated
+        return [float(d) for d in reported]
+
     def _resolve_session_status(self, score: SessionScore) -> SessionOutcomeStatus:
         error_source = score.session_metadata.get("error_source")
         if error_source == "cancelled":
@@ -294,7 +369,7 @@ class ResultsObserver(Observer):
             if score.is_finished is True and score.success:
                 return SessionOutcomeStatus.SUCCESS
             return SessionOutcomeStatus.LIMIT_REACHED
-        if error_source in ("agent", "benchmark"):
+        if error_source in ("agent", "benchmark", "infra"):
             return SessionOutcomeStatus.ERROR
         if score.session_metadata.get("error"):
             return SessionOutcomeStatus.ERROR
@@ -498,7 +573,7 @@ class ResultsObserver(Observer):
         return results_obj
 
     def _set_reason(self, session, reason: str, *, overwrite: bool = False) -> None:
-        session_id = session.session_id if session else None
+        session_id = local_session_id(session) if session else None
         if session_id is None:
             return
         with self._lock:
@@ -510,7 +585,7 @@ class ResultsObserver(Observer):
             data.reason = reason
 
     def _pop_reason(self, session) -> str:
-        session_id = session.session_id if session else None
+        session_id = local_session_id(session) if session else None
         if session_id is None:
             return "ended"
         with self._lock:
@@ -526,17 +601,25 @@ class ResultsObserver(Observer):
             data = self._sessions.get(session_id)
             agent = data.agent if data is not None else None
         agent_cost_report = CostReport.initialize_empty()
-        benchmark_cost_report = CostReport.initialize_empty()
         if agent is not None:
             try:
                 agent_cost_report = agent.get_cost()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 agent_cost_report = CostReport.initialize_empty()
-        try:
-            benchmark_cost_report = session.get_cost()
-        except Exception:
-            benchmark_cost_report = CostReport.initialize_empty()
+        benchmark_cost_report = _cost_or_empty(session)
         return agent_cost_report.total_cost, benchmark_cost_report.total_cost
+
+    def _trajectory_path(self, session_id: str) -> Path:
+        """Resolve the trajectory path locally.
+
+        ``session.paths`` is a property on the *remote* object, so reading it
+        is another HTTP round-trip -- and ``_record_action`` runs on every
+        step, which makes it the most frequently hit RPC in the observer.
+        The same path is a pure function of the run's output directory and the
+        session id, both of which this observer already knows, so there is
+        nothing to ask the peer for.
+        """
+        return self.paths.session(session_id).trajectory
 
 
 FileSystemObserver = ResultsObserver

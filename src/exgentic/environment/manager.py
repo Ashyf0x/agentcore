@@ -15,9 +15,10 @@ from pathlib import Path
 from filelock import FileLock
 
 from .docker import DockerBackend
+from .helpers import get_source_fingerprint
 from .local import LocalBackend
 from .protocol import EnvironmentBackend
-from .venv import VenvBackend
+from .venv import VenvBackend, _venv_python
 
 _log = logging.getLogger(__name__)
 
@@ -107,7 +108,15 @@ class EnvironmentManager:
                 return env_dir
             self._remove_marker_entry(name, env_type)
             extra = backend.install(env_dir, module_path=module_path, **kwargs)
-            self._add_marker_entry(name, env_type, {"installed_at": _now_iso(), **extra})
+            # Record what the copy was built from. The venv backend copies the
+            # project rather than linking it, so this is the only way to tell
+            # later whether the copy still matches the source tree.
+            fingerprint = get_source_fingerprint(project_root)
+            self._add_marker_entry(
+                name,
+                env_type,
+                {"installed_at": _now_iso(), "source_fingerprint": fingerprint, **extra},
+            )
 
         return env_dir
 
@@ -171,6 +180,8 @@ class EnvironmentManager:
             return False
         if self._exgentic_version_stale(name, env_type):
             return False
+        if self._source_fingerprint_stale(name, env_type):
+            return False
         # Verify the actual environment artifacts exist on disk.
         backend = self._backends[env_type]
         env_dir = self.env_path(name)
@@ -211,7 +222,7 @@ class EnvironmentManager:
 
     def venv_python(self, name: str) -> str:
         """Return the path to the venv Python binary."""
-        return str(self.env_path(name) / "venv" / "bin" / "python")
+        return str(_venv_python(self.env_path(name) / "venv"))
 
     def docker_image(self, name: str) -> str | None:
         """Return the Docker image tag, or *None* if not installed."""
@@ -242,6 +253,49 @@ class EnvironmentManager:
                 env_type,
                 stored,
                 current,
+            )
+            return True
+        return False
+
+    def _source_fingerprint_stale(self, name: str, env_type: EnvType) -> bool:
+        """Return True if the source tree no longer matches what was installed.
+
+        The venv backend copies the project, so the copy goes stale as soon as a
+        source file changes -- and ``_exgentic_version_stale`` cannot see that,
+        because editing source never changes the package version. Without this
+        check an environment built yesterday keeps silently serving yesterday's
+        code after today's edits.
+
+        A missing *current* fingerprint means "cannot tell" (not a git checkout,
+        git absent, unreadable file) and is treated as up to date: rebuilding on
+        every run on such a machine would be worse than the staleness. A missing
+        *stored* fingerprint on an environment built before this check existed
+        means "unknown origin"; there the environment is rebuilt once, which is
+        safe because the install is idempotent.
+        """
+        marker = self._read_marker(name)
+        entry = marker.get(env_type, {})
+        stored = entry.get("source_fingerprint")
+        current = get_source_fingerprint()
+        if current is None:
+            return False
+        if stored is None:
+            # Environment predates fingerprinting: rebuild once to establish it.
+            # Only when it actually contains exgentic -- a bare interpreter venv
+            # has nothing to go stale.
+            if entry.get("exgentic_version") is None:
+                return False
+            _log.info(
+                "Environment %s (%s): no source fingerprint recorded, will rebuild once",
+                name,
+                env_type,
+            )
+            return True
+        if stored != current:
+            _log.info(
+                "Environment %s (%s): source changed since install, will rebuild",
+                name,
+                env_type,
             )
             return True
         return False

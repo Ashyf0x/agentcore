@@ -12,6 +12,14 @@ extend-exclude = [
     "__pycache__",
     ".pytest_cache",
     ".exgentic",
+    # Third-party code vendored verbatim: formatted and linted upstream, so
+    # reformatting it here would only make the next sync harder.
+    "src/exgentic/agents/agentcore/core",
+    "src/exgentic/agents/agentcore/context",
+    "src/exgentic/agents/agentcore/memory",
+    "src/exgentic/agents/agentcore/observability",
+    "src/exgentic/agents/agentcore/storage",
+    "src/exgentic/agents/agentcore/tools",
 ]
 
 [lint]

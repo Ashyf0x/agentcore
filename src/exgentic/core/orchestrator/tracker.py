@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+import logging
 import threading
-from typing import Iterable
+from typing import Callable, Iterable
 
 from ...observers.handlers.configs import ConfigsObserver
 from ...observers.handlers.file_logger import FileLoggerObserver
@@ -17,6 +18,12 @@ from ..context import get_context
 from .controller import CleanupController, Controller, CoreController, LimitController
 from .observer import Observer
 from .termination import AgentError, BenchmarkError
+
+# Module-level, not per-instance: an observer failure should be visible from
+# whatever context dispatched it.  No handler is attached here on purpose --
+# ``logging.lastResort`` prints ERROR records to stderr, so the traceback shows
+# up without requiring the caller to configure logging first.
+_log = logging.getLogger(__name__)
 
 
 class Tracker(Observer, Controller):
@@ -94,79 +101,95 @@ class Tracker(Observer, Controller):
             return
         self._controllers.append(controller)
 
-    def on_run_start(self, run_config) -> None:
+    # -- dispatch ------------------------------------------------------------
+    #
+    # Observers are bookkeeping, and bookkeeping must never decide whether a
+    # run survives.  Before this guard, one observer raising while *filing* a
+    # session's failure propagated out of ``run_session`` into the executor's
+    # ``except Exception``, which cancels every pending future -- so a single
+    # unscorable task voided the other N-1.  That is what happened to airline
+    # (8/50) when a serve process died and the next callback read
+    # ``session.session_id`` off the dead proxy.
+    #
+    # Fixing each observer is necessary but not sufficient: the next observer
+    # added, or the next RPC introduced into an existing one, re-opens the same
+    # hole.  The invariant belongs here — a callback that blows up is logged
+    # against the observer that raised it and then skipped, and dispatch
+    # continues to the remaining observers.
+
+    def _dispatch_observers(self, event: str, call: Callable[[Observer], None]) -> None:
         for observer in self._observers:
-            observer.on_run_start(run_config)
+            try:
+                call(observer)
+            except Exception:  # noqa: BLE001 -- see the block comment above
+                _log.exception(
+                    "Observer %s failed during %s; continuing with the rest of the run",
+                    type(observer).__name__,
+                    event,
+                )
+
+    def _dispatch_controllers(self, event: str, call: Callable[[Controller], None]) -> None:
+        # Controllers decide run outcome -- LimitController raises
+        # AgentTerminationError to stop a session, CoreController decides when
+        # the run is over -- so their exceptions must propagate untouched.
+        # They are in-process objects with no transport, so they are not the
+        # failure mode the observer guard exists for.
+        for controller in self._controllers:
+            call(controller)
+
+    def on_run_start(self, run_config) -> None:
+        self._dispatch_observers("on_run_start", lambda o: o.on_run_start(run_config))
 
     def on_run_success(self, results, run_config) -> None:
         if not self._mark_run_final("success"):
             return
-        for observer in self._observers:
-            observer.on_run_success(results, run_config)
-        for controller in self._controllers:
-            controller.on_run_success(results, run_config)
+        self._dispatch_observers("on_run_success", lambda o: o.on_run_success(results, run_config))
+        self._dispatch_controllers("on_run_success", lambda c: c.on_run_success(results, run_config))
 
     def on_run_error(self, error) -> None:
         if not self._mark_run_final("error"):
             return
-        for observer in self._observers:
-            observer.on_run_error(error)
-        for controller in self._controllers:
-            controller.on_run_error(error)
+        self._dispatch_observers("on_run_error", lambda o: o.on_run_error(error))
+        self._dispatch_controllers("on_run_error", lambda c: c.on_run_error(error))
 
     def on_session_enter(self, session_id: str, task_id: str | None) -> None:
-        for observer in self._observers:
-            observer.on_session_enter(session_id, task_id)
+        self._dispatch_observers("on_session_enter", lambda o: o.on_session_enter(session_id, task_id))
 
     def on_session_creation(self, session) -> None:
-        for observer in self._observers:
-            observer.on_session_creation(session)
+        self._dispatch_observers("on_session_creation", lambda o: o.on_session_creation(session))
 
     def on_session_start(self, session, agent, observation) -> None:
-        for observer in self._observers:
-            observer.on_session_start(session, agent, observation)
+        self._dispatch_observers("on_session_start", lambda o: o.on_session_start(session, agent, observation))
 
     def on_react_success(self, session, action) -> None:
-        for observer in self._observers:
-            observer.on_react_success(session, action)
-        for controller in self._controllers:
-            controller.on_react_success(session, action)
+        self._dispatch_observers("on_react_success", lambda o: o.on_react_success(session, action))
+        self._dispatch_controllers("on_react_success", lambda c: c.on_react_success(session, action))
 
     def on_step_success(self, session, observation) -> None:
-        for observer in self._observers:
-            observer.on_step_success(session, observation)
-        for controller in self._controllers:
-            controller.on_step_success(session, observation)
+        self._dispatch_observers("on_step_success", lambda o: o.on_step_success(session, observation))
+        self._dispatch_controllers("on_step_success", lambda c: c.on_step_success(session, observation))
 
     def on_react_error(self, session, error) -> None:
-        for observer in self._observers:
-            observer.on_react_error(session, error)
-        for controller in self._controllers:
-            controller.on_react_error(session, error)
+        self._dispatch_observers("on_react_error", lambda o: o.on_react_error(session, error))
+        self._dispatch_controllers("on_react_error", lambda c: c.on_react_error(session, error))
         raise AgentError(error)
 
     def on_step_error(self, session, error) -> None:
-        for observer in self._observers:
-            observer.on_step_error(session, error)
-        for controller in self._controllers:
-            controller.on_step_error(session, error)
+        self._dispatch_observers("on_step_error", lambda o: o.on_step_error(session, error))
+        self._dispatch_controllers("on_step_error", lambda c: c.on_step_error(session, error))
         raise BenchmarkError(error)
 
     def on_session_error(self, session, error) -> None:
-        for observer in self._observers:
-            observer.on_session_error(session, error)
+        self._dispatch_observers("on_session_error", lambda o: o.on_session_error(session, error))
 
     def on_session_success(self, session, score, agent) -> None:
-        for observer in self._observers:
-            observer.on_session_success(session, score, agent)
+        self._dispatch_observers("on_session_success", lambda o: o.on_session_success(session, score, agent))
 
     def on_session_scoring(self, session) -> None:
-        for observer in self._observers:
-            observer.on_session_scoring(session)
+        self._dispatch_observers("on_session_scoring", lambda o: o.on_session_scoring(session))
 
     def on_session_reuse(self, session_results) -> None:
-        for observer in self._observers:
-            observer.on_session_reuse(session_results)
+        self._dispatch_observers("on_session_reuse", lambda o: o.on_session_reuse(session_results))
 
     def _ensure_core_controller(self) -> None:
         cores = [item for item in self._controllers if isinstance(item, CoreController)]

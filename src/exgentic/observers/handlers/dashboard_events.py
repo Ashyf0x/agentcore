@@ -23,6 +23,7 @@ from ...core.orchestrator.termination import (
 )
 from ...core.types import BenchmarkResults, SessionScore
 from ...utils.paths import RunPaths
+from .session_refs import local_session_id
 
 
 class DashboardEventsObserver(Observer):
@@ -81,7 +82,7 @@ class DashboardEventsObserver(Observer):
         self._emit_run_meta()
 
     def on_session_start(self, session, agent: Agent, observation) -> None:
-        sid = session.session_id
+        sid = local_session_id(session)
         tid = threading.get_ident()
         with self._events_lock:
             if tid is not None:
@@ -214,7 +215,7 @@ class DashboardEventsObserver(Observer):
             )
 
     def on_session_success(self, session, score: SessionScore, agent: Agent) -> None:
-        sid = session.session_id
+        sid = local_session_id(session)
         self._flush_pending()
         self._cleanup_thread_session()
         success = bool(score.success)
@@ -252,7 +253,7 @@ class DashboardEventsObserver(Observer):
         )
 
     def on_session_error(self, session, error) -> None:
-        sid = session.session_id
+        sid = local_session_id(session)
         self._flush_pending()
         self._cleanup_thread_session()
         error_source = None
@@ -263,6 +264,11 @@ class DashboardEventsObserver(Observer):
         elif isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             error_source = "cancelled"
         root_error = error.error if isinstance(error, (AgentError, BenchmarkError)) else None
+        # See ``ResultsHandler.on_session_error``: adopt an agent's own
+        # ``infra`` attribution so the dashboard does not label endpoint
+        # failures as agent bugs. Outcome is unchanged -- both are ERROR.
+        if getattr(root_error, "error_source", None) == "infra":
+            error_source = "infra"
         error_message = str(root_error) if root_error else str(error)
         details = {"error": error_message}
         if error_source is not None:

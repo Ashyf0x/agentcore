@@ -1,0 +1,7 @@
+task_id,v2_status,v2_score,v2_steps,v2_minutes,pilot48_status,pilot48_score,pilot48_steps,pilot48_minutes,ondemand_status,ondemand_score,ondemand_steps,ondemand_minutes,ondemand_is_finished,finish_called,submitted_answer,ground_truth,passed_assertions,failed_assertions,injected_actions,discovery_calls,call_api_calls,llm_rounds,stop_reason
+23cf851_1,unfinished,0.5,24,5.8,unsuccessful,0.5,47,7.8,success,1.0,9,1.0,True,True,11,11,2,0,6,5,3,13,cancelled
+23cf851_2,unfinished,0.5,24,5.4,unsuccessful,0.5,46,5.9,success,1.0,11,1.3,True,True,79,79,2,0,6,5,5,18,cancelled
+23cf851_3,unfinished,0.5,23,8.5,unsuccessful,0.5,56,3.8,success,1.0,11,1.2,True,True,26,26,2,0,6,5,5,16,cancelled
+68ee2c9_1,unfinished,0.0,93,16.1,unfinished,0.0,93,4.4,limit_reached,0.0,100,3.6,False,False,,,0,5,6,8,92,19,cancelled
+396c5a2_1,unfinished,0.0,34,5.6,unsuccessful,0.0,54,3.3,unsuccessful,0.833,16,0.8,True,True,"Added ""Infinite Dreams"" (song_id 311, play_count 990) to the Spotify player queue.",,5,1,6,9,6,17,cancelled
+530b157_1,unfinished,0.1,36,8.6,unsuccessful,0.1,54,7.4,unsuccessful,0.9,22,1.4,True,True,"Sent $54 to Kristin White via Venmo with note ""Groceries"" and texted ""It is done.""",,9,1,6,12,9,18,cancelled

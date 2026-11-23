@@ -296,3 +296,70 @@ def test_rewire_preserves_existing_invoking_actions():
 
     assert rewired.observations[0].invoking_actions == [action_b]
     assert rewired.observations[1].invoking_actions == [action_a]
+
+
+class _InfraFailure(RuntimeError):
+    """Mimics agentcore's FatalRunError: an agent that blames infrastructure."""
+
+    error_source = "infra"
+
+
+def test_agent_failure_keeps_its_error_source():
+    # The harness labels a session from ``error_source`` on the exception it
+    # catches. Re-raising across the thread boundary must not drop it, or an
+    # endpoint outage is recorded as an agent bug.
+    coord = _coordinator()
+    coord.record_fatal(_InfraFailure("endpoint timed out"))
+
+    try:
+        coord.react(None)
+    except RuntimeError as exc:
+        assert getattr(exc, "error_source", None) == "infra"
+    else:
+        raise AssertionError("react() must raise after a fatal was recorded")
+
+
+def test_agent_failure_without_source_does_not_invent_one():
+    coord = _coordinator()
+    coord.record_fatal(ValueError("plain"))
+
+    try:
+        coord.react(None)
+    except RuntimeError as exc:
+        assert getattr(exc, "error_source", None) is None
+    else:
+        raise AssertionError("react() must raise after a fatal was recorded")
+
+
+def test_record_fatal_wakes_with_error_not_clean_close():
+    # The P0 race: ``execute(None)`` in a finally closes the coordinator, and a
+    # failure recorded afterwards leaves a window where ``react()`` returns
+    # ``None`` -- the harness then reads "conversation over", scores it 0, and
+    # the outage disappears into the denominator.
+    coord = _coordinator()
+    coord.record_fatal(_InfraFailure("boom"))
+
+    try:
+        result = coord.react(None)
+    except RuntimeError:
+        return
+    raise AssertionError(f"expected a raise, got {result!r}")
+
+
+def test_agent_turn_error_survives_pickling():
+    # The runner ships agent exceptions between processes with cloudpickle.
+    # Default pickling replays ``__init__(*args)``, which fails here because
+    # ``args`` is only the message -- the transport then falls back to a
+    # builtin, and ``error_source`` is silently dropped on the way.
+    import cloudpickle
+
+    from exgentic.adapters.agents.coordinator import _AgentTurnError
+
+    original = _InfraFailure("endpoint down")
+    turn = _AgentTurnError("boom", original)
+
+    back = cloudpickle.loads(cloudpickle.dumps(turn))
+
+    assert type(back).__name__ == "_AgentTurnError"
+    assert back.error_source == "infra"
+    assert type(back.original).__name__ == "_InfraFailure"

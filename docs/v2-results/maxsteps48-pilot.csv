@@ -1,0 +1,7 @@
+task_id,old_status,old_score,old_steps,new_status,new_score,new_steps,old_is_finished,new_is_finished,finish_called,submitted_answer,ground_truth,max_action_turn_new,llm_rounds_new,stop_reason_new,real_failures_new,passed_assertions_new,failed_assertions_new,minutes_new
+23cf851_1,unfinished,0.5,24,unsuccessful,0.5,47,False,True,True,7,11,47,26,cancelled/26,0,1,1,7.8
+23cf851_2,unfinished,0.5,24,unsuccessful,0.5,46,False,True,True,44,79,46,29,cancelled/29,0,1,1,5.9
+23cf851_3,unfinished,0.5,23,unsuccessful,0.5,56,False,True,True,21,26,56,16,cancelled/16,0,1,1,3.8
+68ee2c9_1,unfinished,0.0,93,unfinished,0.0,93,False,False,False,,,94,,context_budget,4,0,5,4.4
+396c5a2_1,unfinished,0.0,34,unsuccessful,0.0,54,False,True,True,No songs by Lily Moon have been played over 980 times. The highest play count among her so,,54,25,cancelled/25,5,0,6,3.3
+530b157_1,unfinished,0.1,36,unsuccessful,0.1,54,False,True,True,Unable to complete: Kristin's phone number could not be found in any available source (pho,,54,47,cancelled/47,8,1,9,7.4

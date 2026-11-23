@@ -1,0 +1,16 @@
+task_id,v2_status,v2_score,v2_steps,v2_minutes,v2_is_finished,pilot48_status,pilot48_score,pilot_status,pilot_score,all15_status,all15_score,all15_steps,all15_minutes,all15_is_finished,finish_called,submitted_answer,ground_truth,passed_assertions,failed_assertions,num_tests,injected_actions,discovery_calls,call_api_calls,invalid_actions,api_error_obs,call_api_error_obs,finish_bypass_attempts,llm_rounds,stop_reason
+23cf851_1,unfinished,0.5,24,5.8,False,unsuccessful,0.5,success,1.0,success,1.0,9,1.5,True,True,11,11,2,0,2,6,5,3,0,0,0,0,13,cancelled
+23cf851_2,unfinished,0.5,24,5.4,False,unsuccessful,0.5,success,1.0,success,1.0,11,1.0,True,True,79,79,2,0,2,6,5,5,0,0,0,0,18,cancelled
+23cf851_3,unfinished,0.5,23,8.5,False,unsuccessful,0.5,success,1.0,success,1.0,11,1.1,True,True,26,26,2,0,2,6,5,5,0,0,0,0,16,cancelled
+37a8675_1,unfinished,0.0,35,6.9,False,,,,,unsuccessful,0.833,22,1.3,True,True,Successfully sent $91 privately on Venmo to Thomas Solomon (phone: 2192158297). Transaction ID: 8216.,,5,1,6,6,10,11,0,5,4,0,18,cancelled
+396c5a2_1,unfinished,0.0,34,5.6,False,unsuccessful,0.0,unsuccessful,0.833,unsuccessful,0.833,17,1.0,True,True,"Added ""Infinite Dreams"" (song_id 311, play_count 990) to the Spotify queue.",,5,1,6,6,11,5,0,0,0,0,14,cancelled
+396c5a2_2,unfinished,0.0,37,5.6,False,,,,,unsuccessful,0.833,16,1.1,True,True,"Added ""The Silence Between Us"" (play_count 991) to the Spotify queue.",,5,1,6,6,9,6,0,0,0,0,19,cancelled
+396c5a2_3,unfinished,0.0,26,3.9,False,,,,,unsuccessful,0.833,18,0.9,True,True,"Added 1 song (Crumbling Castles in the Sand, play_count 983) to the Spotify queue.",,5,1,6,6,11,6,0,0,0,0,18,cancelled
+530b157_1,unfinished,0.1,36,8.6,False,unsuccessful,0.1,unsuccessful,0.9,unsuccessful,0.9,22,1.0,True,True,"Sent $54 to Kristin White via Venmo with note ""Groceries"" and texted ""It is done.""",,9,1,10,6,12,9,0,0,0,0,18,cancelled
+530b157_3,unfinished,0.1,30,4.5,False,,,,,unsuccessful,0.9,18,0.9,True,True,"Sent $72 to Robert Martinez via Venmo with note ""Thanks for the groceries!"" and texted ""Done. Thanks!""",,9,1,10,6,10,7,0,0,0,0,16,cancelled
+57c3486_1,limit_reached,0.6,100,7.3,False,,,,,limit_reached,0.6,100,4.3,False,False,,,3,2,5,6,8,92,0,0,0,0,21,cancelled
+57c3486_2,unfinished,0.2,84,7.4,False,,,,,unfinished,0.6,33,1.6,False,False,,,3,2,5,6,7,26,0,0,0,0,,
+57c3486_3,unfinished,0.2,64,9.1,False,,,,,unsuccessful,0.8,98,4.0,True,True,"Liked all 77 songs from the 9 followed artists (Nova Harmony, Lucas Diaz, Emily Rivers, Grace Harrison, Luna S",,4,1,5,6,8,89,0,0,0,0,22,cancelled
+68ee2c9_1,unfinished,0.0,93,16.1,False,unfinished,0.0,limit_reached,0.0,limit_reached,0.0,100,4.0,False,False,,,0,5,5,6,8,92,0,0,0,0,19,cancelled
+6c2c621_2,unfinished,0.125,40,7.4,False,,,,,unsuccessful,0.5,58,3.6,True,True,20 notes exported to ~/backups/notes/,,4,4,8,6,11,46,0,0,0,0,26,cancelled
+6c2c621_3,unfinished,0.125,49,7.6,False,,,,,unsuccessful,0.5,97,6.8,True,True,All 38 Simple Note notes exported to ~/backups/simple_notes/ as .md files named by title (whitespace replaced ,,4,4,8,6,11,85,0,0,0,0,34,cancelled

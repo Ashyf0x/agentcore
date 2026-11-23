@@ -1,0 +1,44 @@
+{
+  "benchmark": "appworld",
+  "agent": "agentcore",
+  "subset": "dev",
+  "output_dir": "/home/ashy/projects/exgentic/outputs/ondemand-all15",
+  "cache_dir": "/home/ashy/.exgentic",
+  "run_id": "ondemand-all15",
+  "model": "openai/qwen3.8-reasoner",
+  "benchmark_kwargs": {
+    "subset": "dev",
+    "tool_schema_mode": "on_demand"
+  },
+  "agent_kwargs": {
+    "context_window_tokens": 131072,
+    "output_reserve_tokens": 8192,
+    "max_output_tokens": 4096,
+    "model_timeout": 900,
+    "http_timeout": 600,
+    "model": "openai/qwen3.8-reasoner",
+    "max_steps": 48
+  },
+  "task_ids": [
+    "23cf851_1",
+    "23cf851_2",
+    "23cf851_3",
+    "37a8675_1",
+    "396c5a2_1",
+    "396c5a2_2",
+    "396c5a2_3",
+    "530b157_1",
+    "530b157_3",
+    "57c3486_1",
+    "57c3486_2",
+    "57c3486_3",
+    "68ee2c9_1",
+    "6c2c621_2",
+    "6c2c621_3"
+  ],
+  "num_tasks": null,
+  "max_workers": 1,
+  "max_steps": 100,
+  "max_actions": 100,
+  "overwrite_sessions": false
+}

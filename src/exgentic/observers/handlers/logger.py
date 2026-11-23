@@ -28,6 +28,7 @@ from ...core.types import Action, ModelSettings, SessionOutcomeStatus
 from ...utils.paths import RunPaths, get_run_paths, get_session_paths
 from ...utils.settings import get_settings
 from .recap import RunRecapMixin
+from .session_refs import local_session_id
 from .session_ledger import SessionLedger
 
 
@@ -63,7 +64,14 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
     _MAX_REUSE_DURATION_SECONDS = 7 * 24 * 60 * 60
     _MAX_VISIBLE_SESSIONS = 10
 
-    def __init__(self, console: Console | None = None) -> None:
+    def __init__(self, console: Console | None = None, run_id: str | None = None) -> None:
+        # ``Observer.__init__`` initialises ``_run_id`` and the ``_paths``
+        # cache that the ``paths`` property fills in.  Skipping it used to be
+        # invisible because ``self.paths`` was only reached through
+        # ``session.paths``; now that session directories are resolved from
+        # the observer's own run paths, the missing attributes surface as an
+        # AttributeError on the error-reporting path.
+        super().__init__(run_id)
         self._console = console or Console()
         self._lock = threading.Lock()
         self._ledger = SessionLedger()
@@ -124,7 +132,7 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
     def on_session_start(self, session, agent, observation) -> None:
         if not self._enabled(logging.INFO):
             return
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.register(session_id)
         self._start_session_progress(session_id, session_number, agent, session)
 
@@ -133,14 +141,14 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
             return
         if not self._enabled(logging.INFO):
             return
-        session_id = session.session_id
+        session_id = local_session_id(session)
         self._ledger.increment_steps(session_id)
         self._advance_session_progress(session_id)
 
     def on_session_success(self, session, score, agent) -> None:
         if not self._enabled(logging.INFO):
             return
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.get_number(session_id)
         limit_reached = False
         try:
@@ -156,11 +164,11 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
             is_finished=score.is_finished,
         )
         if outcome == "success":
-            link = self._format_path_link(session.paths.root)
+            link = self._format_path_link(self._session_root(session_id))
             desc = f"Session {session_number} ✔ success ({link})"
             color = "green"
         else:
-            link = self._format_path_link(session.paths.root)
+            link = self._format_path_link(self._session_root(session_id))
             desc = f"Session {session_number} ⏹ {outcome} ({link})"
             color = "yellow"
         self._update_session_progress_description(session_id, f"[{color}]{desc}[/{color}]")
@@ -170,9 +178,9 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
     def on_session_scoring(self, session) -> None:
         if not self._enabled(logging.INFO):
             return
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.get_number(session_id)
-        link = self._format_path_link(session.paths.root)
+        link = self._format_path_link(self._session_root(session_id))
         desc = f"Session {session_number} ⏳ scoring ({link})"
         self._update_session_progress_description(session_id, f"[yellow]{desc}[/yellow]")
         if self._progress is None:
@@ -181,16 +189,8 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
             self._progress.refresh()
 
     def on_session_error(self, session, error) -> None:
-        session_id = session.session_id if session else None
-        session_root = None
-        if session is not None:
-            session_root = session.paths.root
-        elif session_id is not None:
-            try:
-                ctx = get_context()
-                session_root = RunPaths.from_context(ctx).session(session_id).root
-            except RuntimeError:
-                pass
+        session_id = local_session_id(session) if session else None
+        session_root = self._session_root(session_id) if session_id is not None else None
         session_number = self._ledger.get_number(session_id)
         if not self._enabled(logging.INFO):
             return
@@ -420,12 +420,21 @@ class ConsoleLoggerObserver(Observer, RunRecapMixin):
             return
         total = agent.max_steps
         task_id = self._progress.add_task(
-            f"Session {session_number} ({self._format_path_link(session.paths.root)})",
+            f"Session {session_number} ({self._format_path_link(self._session_root(session_id))})",
             total=total if total else None,
             unit="steps",
             hide_total=True,
         )
         self._session_tasks[session_id] = (task_id, total)
+
+    def _session_root(self, session_id: str):
+        """Resolve a session's directory without an RPC to the session object.
+
+        ``session.paths`` is a property on the remote object, so reading it
+        costs a round-trip -- and on a dead peer it raises instead of
+        returning, turning a progress-bar update into a cancelled run.
+        """
+        return self.paths.session(session_id).root
 
     def _update_session_progress_description(self, session_id: str, description: str) -> None:
         if self._progress is None:

@@ -10,9 +10,9 @@ from enum import StrEnum
 from typing import Any, Optional
 
 from filelock import FileLock, Timeout
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SerializeAsAny, field_validator
 
-from ...utils.cost import CostReport
+from ...utils.cost import CostReport, restore_report
 from .evaluation import BaseEvaluationConfig
 
 
@@ -50,7 +50,12 @@ class SessionResults(BaseModel):
     llm_time: float = 0.0
     llm_call_count: int = 0
     details: dict[str, Any] = {}
-    cost_reports: dict[str, CostReport] = Field(default_factory=dict)
+    # ``SerializeAsAny`` so the concrete report type decides the payload.
+    # Without it pydantic serialises by the declared base class and every
+    # subclass field is dropped -- ``LiteLLMCostReport``'s token counts never
+    # reached results.json, which made an unpriced endpoint look like an agent
+    # that never called a model.
+    cost_reports: dict[str, SerializeAsAny[CostReport]] = Field(default_factory=dict)
     task_id: Optional[str] = None
 
     @field_validator("cost_reports", mode="before")
@@ -65,7 +70,10 @@ class SessionResults(BaseModel):
 
             raise TypeError(f"Invalid type for cost_reports[{key}]: {type(val)}")
 
-        return v
+        # Dictionaries come from results.json. Rebuild the concrete report
+        # type before validation resolves them to the declared base class,
+        # which would drop every subclass field.
+        return {key: restore_report(val) for key, val in v.items()}
 
 
 class SessionScore(BaseModel):

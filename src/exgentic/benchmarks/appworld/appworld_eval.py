@@ -13,6 +13,7 @@ must remain importable without the ``appworld`` package installed.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import shutil
@@ -22,6 +23,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
+    Field,
     create_model,
 )
 
@@ -53,6 +55,39 @@ APPWORLD_TOTAL_TASKS = {
     "test_challenge": 417,
 }
 
+_ON_DEMAND_FINISH_DESCRIPTION = (
+    "End the task. Set answer ONLY when the task instruction explicitly asks for a "
+    "value (a number, yes/no, or a specific name). For tasks that only ask for "
+    "actions, call finish without an answer and do NOT describe or summarize what "
+    "you did."
+)
+
+_ON_DEMAND_FINISH_ANSWER_DESCRIPTION = (
+    "The final answer. Provide it if and only if the task instruction is a question "
+    "that expects a value. For action-only tasks omit this field entirely; never put "
+    "a summary of the actions you performed here."
+)
+
+
+def _finish_parameters_for_on_demand(parameters: dict[str, Any]) -> dict[str, Any]:
+    """Restate the answer rule where an ``on_demand`` model actually reads it.
+
+    AppWorld's own parameter description already says the answer must be omitted
+    for non-question tasks, but in ``on_demand`` mode the model discovers the API
+    through tools and then tends to hand in a prose recap of its actions. The
+    evaluator treats that as a wrong answer whenever the reference answer is
+    null, so the field description has to be unambiguous. Types and defaults are
+    copied untouched.
+    """
+    tightened = copy.deepcopy(parameters)
+    props = tightened.get("properties")
+    if isinstance(props, dict):
+        answer = props.get("answer")
+        if isinstance(answer, dict):
+            answer["description"] = _ON_DEMAND_FINISH_ANSWER_DESCRIPTION
+    return tightened
+
+
 if TYPE_CHECKING:
     from appworld.environment import AppWorld  # type: ignore
 
@@ -77,12 +112,18 @@ class AppWorldSession(Session):
         use_cache: bool = True,
         tool_name_separator: str = ".",
         max_interactions: int | None = None,
+        tool_schema_mode: str = "full",
     ) -> None:
+        if tool_schema_mode not in ("full", "on_demand"):
+            raise ValueError(
+                f"tool_schema_mode must be 'full' or 'on_demand', got {tool_schema_mode!r}"
+            )
         if session_id is not None:
             self._session_id = session_id
         self._env_kwargs = env_kwargs or {}
         self._tool_name_separator = tool_name_separator
         self._max_interactions = max_interactions
+        self._tool_schema_mode = tool_schema_mode
         self._action_count = 0
         self._registry = ActionsHandler(
             logger=self.logger,
@@ -161,6 +202,7 @@ class AppWorldSession(Session):
             "env_kwargs": self._env_kwargs,
             "tool_name_separator": self._tool_name_separator,
             "max_interactions": self._max_interactions,
+            "tool_schema_mode": self._tool_schema_mode,
         }
 
     @property
@@ -178,9 +220,32 @@ class AppWorldSession(Session):
             raise ValueError("AppWorld task is not initialized")
 
         allowed = ", ".join(app for app in self.world.task.allowed_apps if app != "api_docs")
+        discovery = ""
+        if self._tool_schema_mode == "on_demand":
+            # Without this the model sees only six tools and has no way to know
+            # that it is supposed to look an API up before executing it. The
+            # full-schema mode must keep its policy byte-identical to the v2 runs,
+            # hence the empty-string default rather than a rewritten template.
+            discovery = (
+                "API documentation is not preloaded into this session. Only a small "
+                "set of discovery tools is exposed. Use "
+                "api_docs__show_app_descriptions to list applications, "
+                "api_docs__show_api_descriptions(app_name) to list one app's APIs, "
+                "api_docs__show_api_doc(app_name, api_name) to read the full "
+                "parameter schema, and api_docs__search_api_docs(query) to find "
+                "APIs by keyword. Once the parameters are known, execute the API "
+                "with call_api(app_name, api_name, arguments), where arguments is a "
+                "JSON object whose keys exactly match the documented parameter "
+                "names. Always read show_api_doc before calling an API you have not "
+                "used yet; never invent parameter names. Use finish to end the task: "
+                "pass answer only when the instruction explicitly asks for a value, "
+                "and for action-only tasks call finish with no answer at all -- do "
+                "not summarize what you did.\n\n"
+            )
         return {
             "policy": (
-                "This environment provides a set of applications,"
+                discovery
+                + "This environment provides a set of applications,"
                 " each exposing a predefined set of APIs that may"
                 " be used to perform tasks on behalf of the"
                 " supervisor. The applications include:"
@@ -241,18 +306,34 @@ class AppWorldSession(Session):
             from ...adapters.schemas.json_schema import make_args_model_from_json_schema
 
             tools_specs = self.world.task.api_docs.function_calling()
+            on_demand = self._tool_schema_mode == "on_demand"
             for tool in tools_specs:
                 function = tool["function"]
                 raw_name = function["name"]
                 separator = self._tool_name_separator
                 name = raw_name.replace("__", separator)
                 app, api = name.split(separator, 1)
-                if app == "api_docs":
+                # AppWorld ships four ``api_docs`` meta-tools for looking up a
+                # schema only when it is needed. ``full`` drops them because
+                # every API is already injected as a named tool; ``on_demand``
+                # keeps them and drops the 465 named API tools instead.
+                # ``finish`` is kept in both modes: without it the session can
+                # never set ``is_finished`` and every task reads as unfinished.
+                if on_demand:
+                    if app != "api_docs" and raw_name != "supervisor__complete_task":
+                        continue
+                elif app == "api_docs":
                     continue
                 if api == "show_active_task":
                     continue
 
-                args_model = make_args_model_from_json_schema(name, function["parameters"])
+                parameters = function["parameters"]
+                description = function["description"]
+                if on_demand and raw_name == "supervisor__complete_task":
+                    parameters = _finish_parameters_for_on_demand(parameters)
+                    description = _ON_DEMAND_FINISH_DESCRIPTION
+
+                args_model = make_args_model_from_json_schema(name, parameters)
 
                 if raw_name == "supervisor__complete_task":
                     finish_act = create_model(
@@ -262,7 +343,7 @@ class AppWorldSession(Session):
                     )
                     self._registry.add_action(
                         name="finish",
-                        description=function["description"],
+                        description=description,
                         action_cls=finish_act,
                         handler=self.apply_action,
                         is_finish=True,
@@ -280,7 +361,56 @@ class AppWorldSession(Session):
                         action_cls=act,
                         handler=self.apply_action,
                     )
+            if on_demand:
+                self._register_call_api()
         return self._registry.actions
+
+    def _register_call_api(self) -> None:
+        """Register the generic executor used by ``on_demand`` schema mode.
+
+        The runtime snapshots ``session.actions`` once when it builds the agent,
+        so tools cannot be added mid-session. A single free-form executor is
+        therefore the only way to reach the 465 APIs that were not injected:
+        the model reads one schema through ``api_docs__show_api_doc`` and then
+        calls this tool with the documented parameter names.
+        """
+        call_args = create_model(
+            "AppWorldCallApiArguments",
+            app_name=(
+                str,
+                Field(..., description="Application owning the API, exactly as documented."),
+            ),
+            api_name=(
+                str,
+                Field(..., description="API to execute, exactly as documented."),
+            ),
+            arguments=(
+                dict[str, Any],
+                Field(
+                    default_factory=dict,
+                    description=(
+                        "JSON object of parameters. Keys must match the names "
+                        "returned by api_docs__show_api_doc exactly."
+                    ),
+                ),
+            ),
+        )
+        call_act = create_model(
+            "AppWorldCallApiAction",
+            __base__=SingleAction,
+            name=(Literal["call_api"], "call_api"),
+            arguments=(call_args, ...),
+        )
+        self._registry.add_action(
+            name="call_api",
+            description=(
+                "Execute an AppWorld API. Consult api_docs__show_api_doc first "
+                "to learn the exact parameter names; app_name and api_name must "
+                "match the documentation exactly. Returns the API response."
+            ),
+            action_cls=call_act,
+            handler=self.apply_action,
+        )
 
     @property
     def task_id(self) -> str:
@@ -312,21 +442,46 @@ class AppWorldSession(Session):
             )
         # if action.name not in self._actions_names:
         #     return AppWorldObservation(invoking_actions=[action], result="Wrong name: {action.name}")
-        # Map benchmark-level finish to the supervisor.complete_task endpoint
-        effective_name = action.name
-        if action.name == "finish":
-            separator = self._tool_name_separator
-            effective_name = f"supervisor{separator}complete_task"
-
         separator = self._tool_name_separator
+        effective_name = action.name
+        arguments = action.arguments
+        if isinstance(arguments, BaseModel):
+            arguments = arguments.model_dump()
+
+        if action.name == "call_api":
+            # Generic executor: unpack the (app, api, arguments) triple, then
+            # fall through to the ordinary requester path below. Rejecting a
+            # direct supervisor.complete_task keeps both schema modes identical
+            # about how a task is ended -- ``finish`` must remain the only way.
+            if not isinstance(arguments, dict):
+                arguments = {}
+            app_name = str(arguments.get("app_name") or "")
+            api_name = str(arguments.get("api_name") or "")
+            payload = arguments.get("arguments") or {}
+            if not isinstance(payload, dict):
+                payload = {}
+            if (app_name, api_name) == ("supervisor", "complete_task"):
+                self._step_count += 1
+                return AppWorldObservation(
+                    invoking_actions=[action],
+                    result="Error: use the finish tool to complete the task.",
+                )
+            effective_name = f"{app_name}{separator}{api_name}"
+            arguments = payload
+        elif action.name == "finish":
+            # Map benchmark-level finish to the supervisor.complete_task endpoint
+            effective_name = f"supervisor{separator}complete_task"
+            # An empty answer is the same as no answer; passing an empty string
+            # makes AppWorld compare "" against its null reference answer.
+            if isinstance(arguments, dict):
+                answer = arguments.get("answer")
+                if isinstance(answer, str) and not answer.strip():
+                    arguments.pop("answer", None)
+
         parts = effective_name.split(separator, 1)
         if len(parts) != 2:
             parts = effective_name, ""
         app_name, api_name = parts
-
-        arguments = action.arguments
-        if isinstance(arguments, BaseModel):
-            arguments = arguments.model_dump()
 
         self.logger.info(f"App: {app_name}, Function: {api_name}, Arguments: {arguments}")
 

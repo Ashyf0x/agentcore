@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -24,6 +25,81 @@ def get_exgentic_version() -> str:
         return version("exgentic")
     except Exception:
         return "0.0.0"
+
+
+def get_source_fingerprint(project_root: Path | None = None) -> str | None:
+    """Return a fingerprint of the exgentic source tree that will be installed.
+
+    A venv environment is a *copy* of the project (``uv pip install <path>``,
+    not ``-e``).  The version string cannot detect that the copy is stale,
+    because editing source files never changes ``pyproject.toml`` and so never
+    changes ``importlib.metadata.version("exgentic")``.  The result is silent:
+    an environment built yesterday keeps serving yesterday's code while the
+    source tree moves on.
+
+    This fingerprint is what closes that gap.  It combines the git commit with
+    a hash of the content of all source files, so it changes when:
+
+      * a different commit is checked out,
+      * a file is edited, added or deleted (including uncommitted work).
+
+    Generated, gitignored files (notably ``_version.py``, written by
+    vcs-versioning on every install with a build-date stamp) are excluded:
+    otherwise an install changes the fingerprint with no source change.
+
+    Returns ``None`` when the tree cannot be fingerprinted (not a source
+    checkout, git missing, hashing failed).  ``None`` means "no opinion":
+    callers must not treat it as a mismatch, or every environment would be
+    rebuilt on a machine without git.
+    """
+    if project_root is None:
+        from ..adapters.runners._utils import find_project_root
+
+        project_root = find_project_root()
+    src = Path(project_root) / "src" / "exgentic"
+    if not src.is_dir():
+        return None
+
+    parts: list[str] = []
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if head.returncode == 0:
+            parts.append(head.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    digest = hashlib.sha256()
+    # Generated, gitignored files (notably _version.py, written by
+    # vcs-versioning on every install with a build-date stamp) churn with no
+    # real source change. Hashing them makes the fingerprint unstable and
+    # forces a redundant environment rebuild on every run.
+    _GENERATED_FILES = frozenset({"_version.py"})
+    files = sorted(
+        p
+        for p in src.rglob("*.py")
+        if "__pycache__" not in p.parts and p.name not in _GENERATED_FILES
+    )
+    if not files:
+        return None
+    for path in files:
+        try:
+            # Path and content both go in: a rename changes the fingerprint even
+            # when the bytes do not.
+            digest.update(path.relative_to(src).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+        except OSError:
+            return None
+    parts.append(digest.hexdigest())
+
+    return ":".join(parts) if parts else None
 
 
 def get_exgentic_install_target() -> tuple[Path | None, list[str] | None]:
@@ -162,7 +238,10 @@ def run_setup_sh(module_path: str, env_dir: Path, *, venv_dir: Path | None = Non
     env = build_subprocess_env()
     if venv_dir is not None:
         env["VIRTUAL_ENV"] = str(venv_dir)
-        env["PATH"] = str(venv_dir / "bin") + os.pathsep + env.get("PATH", "")
+        # POSIX venvs keep executables in bin/, Windows in Scripts/. Inlined
+        # rather than imported from .venv because that module imports this one.
+        scripts = venv_dir / ("Scripts" if os.name == "nt" else "bin")
+        env["PATH"] = str(scripts) + os.pathsep + env.get("PATH", "")
     subprocess.run(["bash", str(setup_path)], check=True, cwd=str(env_dir), env=env)
 
 

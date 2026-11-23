@@ -62,6 +62,20 @@ class AgentInstance(ABC):
         """Estimated monetary cost; default 0.0."""
         return CostReport.initialize_empty()
 
+    def get_llm_timings(self) -> list[float]:
+        """Wall-clock seconds spent in model calls, one entry per call.
+
+        Default empty: an agent that does not measure its own calls has nothing
+        to report, and inventing a number would be worse than zero. Agents that
+        call the model themselves (rather than through LiteLLM, whose trace
+        logger feeds ``SessionLLMTimings``) override this.
+
+        A list rather than a total because the results observer derives both
+        ``llm_time`` (sum) and ``llm_call_count`` (length) from it; returning a
+        scalar would have forced a second method that could drift out of sync.
+        """
+        return []
+
     @abstractmethod
     def react(self, observation: Optional[Observation]) -> Optional[Action]:
         """React to observation - agent controls decision making, None = done."""

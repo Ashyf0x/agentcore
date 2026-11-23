@@ -6,6 +6,35 @@
 
 ---
 
+## About this fork
+
+This repository is a fork of [Exgentic/exgentic](https://github.com/Exgentic/exgentic), maintained as a working copy for building, evaluating, and post-training our own agent runtime (**`agentcore`**) on Exgentic's benchmark harness. Everything below the "Upstream project" divider is the original Exgentic documentation, kept for reference.
+
+### What this fork adds
+
+- **`agentcore` adapter** (`src/exgentic/agents/agentcore/`) — mounts a self-contained agent runtime (model loop, token-budget context management, SQLite execution evidence, tool dispatch) as an Exgentic `CodeAgentInstance`, so it can be scored side-by-side with the bundled agents on tau2, AppWorld, SWE-bench and more. The runtime is vendored in-tree and import-isolated from any installed `agentcore`.
+- **Reliability fixes in the runtime** — resolved-write escalation (a failed write is surfaced once, never replayed, and never deadlocks the session), a context budget that falls back to a byte-length upper bound when the tiktoken encodings are unavailable, and strictly layered HTTP/model timeouts so a hung endpoint fails fast and attribution stays deterministic.
+- **Observability hardening** (`src/exgentic/observers/`, `src/exgentic/core/orchestrator/`) — failure attribution that separates agent errors from infrastructure errors (timeouts, endpoint outages, cancelled runs) instead of scoring them as wrong answers.
+- **Post-training pipeline** (`docs/post-training-plan.md`, `scripts/export_trajectories.py`) — turns successful benchmark trajectories into SFT datasets (Qwen-3.8-reasoner → Qwen3-8B LoRA distillation) and supports the on-policy tau2 re-run loop for DPO/GRPO.
+
+### Results
+
+End-to-end runs of `agentcore` on the Exgentic harness (details and per-task data in [`docs/v2-results/`](docs/v2-results/), methodology in [`docs/post-training-plan.md`](docs/post-training-plan.md)):
+
+| Benchmark | Tasks | Success rate | Notes |
+|---|---:|---:|---|
+| tau2 airline | 50 | 64.0% | 6.0% infra error rate |
+| tau2 retail | 114 | 76.3% | 5.3% infra error rate |
+| tau2 telecom | 114 | 75.4% | 2.6% infra error rate |
+| AppWorld dev | 57 | 42.1% | tool-only benchmark |
+| **Total** | **335** | **68.4%** | 4.8% infra error rate |
+
+A configuration study (step budget and on-demand environment handling, same task sets) lifted the tau2 success rate to ~87.5% for the strongest configuration; that number is a same-task-set configuration comparison, not a generalization claim.
+
+---
+
+## Upstream project
+
 ## What is Exgentic?
 
 Exgentic is a universal evaluation framework that enables standardized testing of AI agents across diverse benchmarks and domains. It provides a consistent interface for evaluating any agent on any benchmark, making it easy to compare performance, reproduce results, and ensure your agent works reliably across different tasks and environments.

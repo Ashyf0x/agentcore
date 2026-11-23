@@ -1,1 +1,10 @@
+# tau2 (Tau Bench 2) pinned to the release Exgentic's adapter targets.
+#
+# v0.1.3 is required: v2.0 moved `load_tasks`/`run_domain` out of `tau2.run` into
+# `tau2.runner`, which breaks the imports in tau2_shim.py.
+#
+# If GitHub is unreachable from your network, install the wheel by hand first
+# (`uv pip install /path/to/tau2-bench-v013`), then list a local path here
+# instead of the git URL. A local path keeps the environment reproducible
+# without needing network access at install time.
 tau2 @ git+https://github.com/sierra-research/tau2-bench.git@v0.1.3

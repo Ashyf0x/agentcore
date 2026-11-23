@@ -3,6 +3,7 @@
 
 from ..types import SessionConfig
 from .controller import Controller
+from .failures import is_infra_failure as _is_infra_failure
 from .observer import Observer
 from .termination import (
     AgentError,
@@ -19,6 +20,43 @@ from .tracker import Tracker
 def _close_session_agent(session, agent_instance) -> None:
     session.close()
     agent_instance.close()
+
+
+def _score_or_error(session, tracker: Tracker):
+    """Score the session, turning a scoring failure into a session error.
+
+    ``score()`` talks to the benchmark after the run has ended, so it can fail
+    for reasons that have nothing to do with the agent: a benchmark runner
+    thread that died mid-turn (tau2 re-raises it here as ``RuntimeError``), a
+    message the benchmark's own validator rejects, a serve process that dropped
+    the connection while writing its checkpoint.
+
+    Left unguarded, such a failure propagates out of the ``except`` block that
+    called it, escapes ``run_session`` entirely, and is caught by the executor
+    loop -- which cancels every pending session and aborts the whole run. One
+    bad transcript then destroys the other N-1 tasks' results.
+
+    Returns ``None`` after recording the failure, so the caller closes up and
+    lets the run continue.
+    """
+    try:
+        return session.score()
+    except Exception as exc:  # noqa: BLE001 -- see docstring
+        # A scoring failure is a teardown failure -- the transcript is gone
+        # either way, and one unscorable transcript must not void the other
+        # N-1 results.  What still matters is attribution: tag the cause so
+        # the observers can record ``infra`` instead of blaming the benchmark
+        # for an endpoint that dropped.
+        source = "infra" if _is_infra_failure(exc) else "benchmark"
+        try:
+            exc.error_source = source
+        except Exception:  # noqa: BLE001 -- builtins with __slots__ refuse
+            try:
+                object.__setattr__(exc, "error_source", source)
+            except Exception:  # noqa: BLE001
+                pass
+        tracker.on_session_error(session, BenchmarkError(exc))
+        return None
 
 
 def run_session(
@@ -82,7 +120,10 @@ def run_session(
         _close_session_agent(session, agent_instance)
     except SessionLimitReachedError as exc:
         tracker.on_session_scoring(session)
-        score = session.score()
+        score = _score_or_error(session, tracker)
+        if score is None:
+            _close_session_agent(session, agent_instance)
+            return
         score.is_finished = False
         score.session_metadata = {
             **(score.session_metadata or {}),
@@ -97,14 +138,22 @@ def run_session(
         _close_session_agent(session, agent_instance)
     except (AgentTerminationError, BenchmarkTerminationError):
         tracker.on_session_scoring(session)
-        score = session.score()
+        score = _score_or_error(session, tracker)
+        if score is None:
+            _close_session_agent(session, agent_instance)
+            return
         if score.is_finished is None:
             score.is_finished = True
         tracker.on_session_success(session, score, agent_instance)
         _close_session_agent(session, agent_instance)
     except BenchmarkError as exc:
         tracker.on_session_error(session, exc)
-        agent_instance.close()
+        # Close both sides.  The old code only closed the agent, leaving the
+        # benchmark serve process orphaned after a failed session.
+        try:
+            session.close()
+        finally:
+            agent_instance.close()
     except RuntimeError as exc:
         from ...integrations.litellm.health import HealthCheckError
 

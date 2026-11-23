@@ -18,6 +18,11 @@ git lfs pull
 
 uv pip install "."
 
+# `uv pip install .` can re-resolve appworld's unbounded `fastapi>=0.110`
+# and pull 0.162+, which no longer accepts `Path(embed=...)`. Re-pin at the
+# end so a fresh install always ends up on a version that builds all apps.
+uv pip install "fastapi==0.115.6"
+
 python -m appworld.cli install
 
 cd - >/dev/null 2>&1 || true

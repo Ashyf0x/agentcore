@@ -1,1 +1,7 @@
 appworld @ git+https://github.com/StonyBrookNLP/appworld.git@edc960129fa6889c2b381715ecd108982029f6d1
+# appworld declares `fastapi>=0.110` with no upper bound. fastapi 0.162+
+# rejects the `embed=` keyword that appworld.apps.build_main_app() passes, so
+# every task dies at startup with
+#   TypeError: Path() got an unexpected keyword argument 'embed'
+# 0.115.6 is the last series verified to build all app routes.
+fastapi==0.115.6

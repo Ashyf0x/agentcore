@@ -33,6 +33,27 @@ _SCRATCH_PREFIX = "venv.tmp."
 _TRASH_PREFIX = "venv.old."
 
 
+def _venv_bin_dir(venv_dir: Path) -> Path:
+    """Return the directory holding *venv_dir*'s executables.
+
+    POSIX venvs use ``bin/``; Windows venvs use ``Scripts/``. Every path into a
+    venv's executables goes through here, because hardcoding the POSIX form makes
+    installs fail on Windows with "No virtual environment found for path ..." and
+    makes subprocess launches fail with ``[WinError 2]``.
+    """
+    return venv_dir / ("Scripts" if os.name == "nt" else "bin")
+
+
+def _venv_python(venv_dir: Path) -> Path:
+    """Return the interpreter path inside *venv_dir*, on any platform."""
+    return _venv_bin_dir(venv_dir) / ("python.exe" if os.name == "nt" else "python")
+
+
+def _venv_script(venv_dir: Path, name: str) -> Path:
+    """Return the path of the console script *name* inside *venv_dir*."""
+    return _venv_bin_dir(venv_dir) / (f"{name}.exe" if os.name == "nt" else name)
+
+
 class VenvBackend:
     """Backend that creates an isolated Python venv with dependencies."""
 
@@ -87,7 +108,7 @@ class VenvBackend:
                 text=True,
             )
 
-            scratch_py = str(scratch / "bin" / "python")
+            scratch_py = str(_venv_python(scratch))
             env = build_subprocess_env()
             if project_root is not None:
                 install_project(uv, scratch_py, project_root, env)
@@ -109,10 +130,10 @@ class VenvBackend:
     def exists(self, env_dir: Path, marker_data: dict) -> bool:
         """Check that the venv Python binary exists.
 
-        With atomic publish, ``venv/bin/python`` can only exist if the
-        entire install pipeline succeeded.
+        With atomic publish, the interpreter can only exist if the entire
+        install pipeline succeeded.
         """
-        return (env_dir / "venv" / "bin" / "python").exists()
+        return _venv_python(env_dir / "venv").exists()
 
     def uninstall(self, env_dir: Path, marker_data: dict) -> None:
         """Remove the venv directory."""

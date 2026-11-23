@@ -159,6 +159,20 @@ def _status_from_paths_without_lock(
     )
 
 
+def _pin_session_ids(session, session_id: str, task_id: str) -> None:
+    """Bind ``session_id``/``task_id`` onto *session*, bypassing any transport.
+
+    ``ObjectProxy.__setattr__`` forwards non-underscore names to the peer, so
+    the write has to go through ``object.__setattr__``.  On a plain object
+    this is an ordinary attribute write.
+    """
+    for attr, value in (("_exgentic_session_id", session_id), ("_exgentic_task_id", task_id)):
+        try:
+            object.__setattr__(session, attr, value)
+        except Exception:  # noqa: BLE001 -- slots/proxies that refuse writes
+            pass
+
+
 def run_session_config(
     *,
     session_config: SessionConfig,
@@ -185,6 +199,13 @@ def run_session_config(
             task_id=str(session_config.task_id),
             session_id=session_id,
         )
+        # Pin the identifiers onto the session object before any observer
+        # callback fires.  A venv-backed session is an ObjectProxy, so every
+        # ``session.session_id`` read is an HTTP RPC to the serve process --
+        # and the one moment the observer must read that id is when filing a
+        # failure, which may be exactly when the peer died.  Recording it
+        # locally makes the observer independent of the transport's health.
+        _pin_session_ids(session, session_id, str(session_config.task_id))
         try:
             # run_session handles session.close() internally.
             run_session(session_config, session, agent, tracker=tracker)

@@ -12,6 +12,7 @@ _STATUS_ORDER = [
     "unsuccessful",
     "unfinished",
     "agent error",
+    "infra error",
     "benchmark error",
     "cancelled",
     "error",
@@ -23,6 +24,7 @@ _STATUS_COLORS = {
     "unsuccessful": "#f59e0b",
     "unfinished": "#facc15",
     "agent error": "#ef4444",
+    "infra error": "#a855f7",
     "benchmark error": "#f97316",
     "cancelled": "#94a3b8",
     "error": "#dc2626",
@@ -39,6 +41,8 @@ def _status_from_outcome(success: Any, is_finished: Any, error_source: Any = Non
         return "unfinished"
     if error_source == "agent":
         return "agent error"
+    if error_source == "infra":
+        return "infra error"
     if error_source == "benchmark":
         return "benchmark error"
     if error_source == "cancelled":

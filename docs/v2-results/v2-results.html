@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentcore v2 结果表与数据校验</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel2:#1c2029; --line:#2a2f3a;
+    --text:#e6e9ef; --dim:#9aa3b2; --faint:#6b7482;
+    --good:#4ade80; --bad:#f87171; --warn:#fbbf24; --info:#60a5fa;
+    --accent:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:40px 28px 80px;
+    background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:13.5px;margin-bottom:32px}
+  h2{font-size:17px;margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h2 .n{color:var(--accent);font-weight:600;margin-right:8px}
+  h3{font-size:14px;margin:22px 0 8px;color:var(--dim);font-weight:600;
+     text-transform:uppercase;letter-spacing:.06em}
+  p{margin:10px 0}
+  .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line)}
+  th{color:var(--faint);font-weight:600;font-size:11.5px;text-transform:uppercase;
+     letter-spacing:.05em;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  tbody tr:hover{background:var(--panel)}
+  tr.total td{border-top:2px solid var(--line);border-bottom:none;
+              font-weight:700;background:var(--panel2)}
+  .ok{color:var(--good)}
+  .ng{color:var(--bad)}
+  .wa{color:var(--warn)}
+  .dim{color:var(--dim)}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin:18px 0 8px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .kpi .v{font-size:24px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
+  .kpi .l{font-size:11.5px;color:var(--faint);margin-top:4px;
+          text-transform:uppercase;letter-spacing:.05em}
+  .kpi .n{font-size:12px;color:var(--dim);margin-top:2px}
+
+  .checks{display:grid;gap:8px;margin:14px 0}
+  .chk{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;
+       background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 14px}
+  .chk .i{font-size:14px;line-height:1.5}
+  .chk .t{font-size:13.5px}
+  .chk .d{font-size:12.5px;color:var(--dim);margin-top:3px}
+  .chk.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 7%,var(--panel))}
+  .chk.warn .i{color:var(--warn);font-weight:700}
+  .chk.warn .d b{color:var(--text)}
+
+  .note{background:var(--panel);border-left:3px solid var(--warn);
+        border-radius:0 8px 8px 0;padding:13px 16px;margin:16px 0;font-size:13.5px}
+  .note.info{border-left-color:var(--info)}
+  .note.bad{border-left-color:var(--bad)}
+  .note.good{border-left-color:var(--good)}
+  .note b{color:var(--text)}
+
+  code{background:var(--panel2);padding:1.5px 6px;border-radius:4px;
+       font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d1d9}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:14px 16px;overflow-x:auto;font:12.5px/1.6 ui-monospace,Menlo,monospace;
+      color:var(--dim);margin:12px 0}
+  ul{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
+        color:var(--faint);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>agentcore v2 结果表</h1>
+<div class="sub">
+  仅 v2 侧自身数据完整性校验 · 未重跑 legacy · 数据源为 session 目录（非 run 级快照）<br>
+  生成于 2026-11-14 · 模型 <span class="mono">openai/qwen3.8-reasoner</span> · 全部 335 个会话
+</div>
+
+<h2><span class="n">1</span>主结果表</h2>
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="v">335</div>
+    <div class="l">已执行会话</div>
+    <div class="n">计划 335，零缺失</div>
+  </div>
+  <div class="kpi">
+    <div class="v ok">68.36%</div>
+    <div class="l">总体成功率</div>
+    <div class="n">229 / 335</div>
+  </div>
+  <div class="kpi">
+    <div class="v">4.78%</div>
+    <div class="l">错误率（infra）</div>
+    <div class="n">16 个，按文本归类全为 infra</div>
+  </div>
+  <div class="kpi">
+    <div class="v">2 种</div>
+    <div class="l">配置形状</div>
+    <div class="n">每 run 内 1 种，跨 run 仅差 timeout</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Benchmark</th><th>计划</th><th>已执行</th><th>成功</th><th>成功率</th>
+      <th>失败</th><th>未完成</th><th>错误</th><th>错误率</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>appworld-dev</td><td>57</td><td>57</td><td>24</td>
+      <td class="ok">42.11%</td><td>14</td><td class="wa">15</td><td>4</td><td>7.02%</td>
+    </tr>
+    <tr>
+      <td>airline</td><td>50</td><td>50</td><td>32</td>
+      <td class="ok">64.00%</td><td>15</td><td>0</td><td>3</td><td>6.00%</td>
+    </tr>
+    <tr>
+      <td>retail</td><td>114</td><td>114</td><td>87</td>
+      <td class="ok">76.32%</td><td>21</td><td>0</td><td>6</td><td>5.26%</td>
+    </tr>
+    <tr>
+      <td>telecom</td><td>114</td><td>114</td><td>86</td>
+      <td class="ok">75.44%</td><td>25</td><td>0</td><td>3</td><td>2.63%</td>
+    </tr>
+    <tr class="total">
+      <td>合计</td><td>335</td><td>335</td><td>229</td>
+      <td class="ok">68.36%</td><td>75</td><td>15</td><td>16</td><td>4.78%</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="dim" style="font-size:12.5px">
+  分母是「已执行」会话数。四类结局互斥且完整：成功 229 + 失败 75 + 未完成 15 + 错误 16 = 335。
+  <b>未完成</b>单列，因为它既不是答错也不是崩溃，而是预算耗尽仍在解题中。
+</p>
+
+<h3>运行特征</h3>
+<table>
+  <thead>
+    <tr><th>Benchmark</th><th>model_timeout</th><th>步数中位</th><th>步数最大</th>
+        <th>单题耗时中位</th><th>P90</th><th>最慢单题</th><th>总耗时</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>appworld-dev</td><td>900s</td><td>26</td><td>100</td><td>4.4 min</td><td>8.7 min</td><td>16.1 min</td><td>273 min</td></tr>
+    <tr><td>airline</td><td>600s</td><td>10</td><td>28</td><td>4.5 min</td><td>10.7 min</td><td>14.4 min</td><td>265 min</td></tr>
+    <tr><td>retail</td><td>600s</td><td>11</td><td>21</td><td>2.9 min</td><td>4.2 min</td><td>12.0 min</td><td>345 min</td></tr>
+    <tr><td>telecom</td><td>600s</td><td>12</td><td>26</td><td>5.0 min</td><td>11.3 min</td><td>23.2 min</td><td>691 min</td></tr>
+    <tr class="total"><td>合计</td><td>—</td><td>—</td><td>100</td><td>—</td><td>—</td><td>23.2 min</td><td>1574 min ≈ 26.2 h</td></tr>
+  </tbody>
+</table>
+
+<p class="dim" style="font-size:12.5px">
+  耗时是<b>串行累积</b>（每 run 1 worker）。四个 run 合计约 26 小时，
+  最慢的 10% 会话占了 21–24% 的总时间——长尾很重，但没有失控到拖垮任务队列。
+</p>
+
+<div class="note info">
+  <b>为什么 appworld 的 timeout 是 900 秒。</b>
+  这是为了<b>与 legacy 的 appworld 同参</b>（设计文档 §4 表格：57 题、1 worker、
+  <span class="mono">model_timeout=900</span>），从而让两边的成对比较成立；
+  它<b>不是</b>因为「600 秒会截断 appworld」——实测 appworld 57 题里只有 3 题超过 600 秒，
+  反倒是 telecom 有 19 题超过（最长 1394 秒，那才是真正的长尾 benchmark）。
+  四个 run 各自内部配置<b>完全一致</b>（见第 2 节），跨 benchmark 的差异是这个历史对齐造成的，
+  不是配置漂移。
+</div>
+
+<div class="note info">
+  <b>别把 <span class="mono">execution_time</span> 当单次请求耗时。</b>
+  它是<b>整个会话的总时长</b>，含多轮 LLM 调用，所以 1394 秒与
+  <span class="mono">model_timeout=600</span> 并不矛盾——后者是<b>单次请求</b>的上限，
+  不是整题预算。唯一的整题级上限是 <span class="mono">max_steps=100</span>。
+  因此「execution_time 超过 timeout」不能作为「超时被漏判」的证据。
+</div>
+
+<h2><span class="n">2</span>数据校验：七项通过，一项标注</h2>
+
+<div class="checks">
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">计划数 = 目录数 = 已执行数</div>
+      <div class="d">
+        四个 run 全部 57/57、50/50、114/114、114/114。<b>零孤儿、零未启动</b>。
+        对比 legacy 的 appworld-dev（40 目录 / 36 执行 / 4 个无结果的空目录 / 3 套配置），
+        v2 的数据结构是干净的。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">每 run 单一配置形状</div>
+      <div class="d">
+        <span class="mono">model_timeout / http_timeout / max_output_tokens / context_window_tokens / output_reserve_tokens</span>
+        在每个 run 内 100% 一致（逐 session 校验，每个 run 只有 1 种形状），无一例外。
+        <br>
+        四个 run 放在一起只有 <b>2 种</b>形状，唯一差异是
+        <span class="mono">model_timeout</span>：appworld 900、其余三个 600。
+        <span class="mono">http_timeout</span> 四个 run 都是 600 ——
+        这个区别很重要，因为 9 条传输超时的执行时间（615–864 秒）都是相对
+        这个 600 秒判定的，不是相对 900。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">结局三元组合法</div>
+      <div class="d">
+        <span class="mono">(status, success, is_finished)</span> 逐条检查，335 条全部落在合法组合内。
+        发现第五种标签 <span class="mono">limit_reached</span>（1 例，撞 run 层 100 步上限），
+        它是合法枚举值，不是脏数据。
+        注意另外 14 个 <span class="mono">unfinished</span> 的
+        <span class="mono">status=unfinished</span>，但它们其实也撞了预算——
+        是 agent 层 24 轮，只是不体现在 <span class="mono">steps</span> 字段上（详见第 3 节）。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">指标分桶规则成立</div>
+      <div class="d">
+        官方指标按 <span class="mono">is_finished</span> 分桶，不按 <span class="mono">status</span> 标签。
+        重算确认：<span class="mono">limit_reached</span> 正确归入 unfinished，
+        没有被错算进 error。四类的和恰好等于执行数。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">无越界值 / 无重复任务 / 无缺失字段</div>
+      <div class="d">
+        <span class="mono">score ∈ [0,1]</span>、<span class="mono">steps ≥ 0</span>、
+        <span class="mono">execution_time &gt; 0</span> 全部满足；
+        <b>每个 run 内部</b> task_id 互不重复、必填字段无空缺。
+        <br>
+        注：跨 run 去重后是 285 个 task_id 而非 335 ——
+        airline 与 retail 各有 50 个题用了同一套编号（<span class="mono">"3"</span>、
+        <span class="mono">"19"</span> 之类），所以同名不等于同题。
+        做跨 benchmark 汇总时<b>必须用 (benchmark, task_id) 做键</b>，不能只用 task_id。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">16 个 error 全是基础设施故障，不是 agent 判断失误</div>
+      <div class="d">
+        逐条读消息：<span class="mono">timed out</span>（9 条，传输超时）、
+        <span class="mono">Model HTTP request rejected</span>（4 条）、
+        <span class="mono">protocol_error</span>（2 条）、
+        <span class="mono">ContextBudgetError</span>（1 条）。
+        按项目自己的 <span class="mono">error_class()</span> 分类：<b>16/16 全为 infra</b>，
+        所以成功率没有被隐藏的 agent 失败低估。
+        <br>
+        9 条 <span class="mono">timed out</span> 的佐证：执行时间 615–864 秒，
+        <b>全部超过 600 秒的 http_timeout</b>，是 RPC 死等超时，不是解题超时。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk warn">
+    <div class="i wa">!</div>
+    <div>
+      <div class="t">但记录的 error_source 字段与上述判定不一致（10 agent / 6 infra）</div>
+      <div class="d">
+        <b>必须知道这一点</b>：上面那 16/16 infra 是<b>事后按错误文本重新分类</b>的结果，
+        而 session 里<b>落盘的 <span class="mono">error_source</span> 字段</b>是
+        <span class="mono">agent=10 / infra=6</span>。
+        两者分歧的 10 条，正是 9 条 <span class="mono">timed out</span>
+        加 1 条 <span class="mono">ContextBudgetError</span>。
+        <br>
+        原因已定位：<span class="mono">results.py</span> 只在
+        <span class="mono">root_error.error_source == "infra"</span> 时升级标签，
+        而内建 <span class="mono">TimeoutError</span> 没有这个属性，
+        于是继承了「从 agent 的 RPC 路径抛出来的」默认值 <span class="mono">agent</span>。
+        <b>该字段的 <span class="mono">agent</span> 读作「谁抛的」，不读作「谁判断错了」。</b>
+        <br>
+        结论：<b>引用错误归因时用 16/16 infra 是安全的，但不要在别处引用
+        <span class="mono">error_source</span> 字段本身</b>——那个字段是错的，修复只对重跑生效。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">未完成是「没解出来」，不是「解出来但记丢了」</div>
+      <div class="d">
+        用 appworld 自己的判定器复核 15 个 unfinished / limit_reached：
+        <b>test_tracker.success 全为 False</b>，得分 0.0–0.6 分布在部分完成区间。
+        任务确实没完成，标签诚实。这是最容易被忽略的一类数据错误，已排除。
+      </div>
+    </div>
+  </div>
+
+  <div class="chk">
+    <div class="i ok">✓</div>
+    <div>
+      <div class="t">run 级快照与逐题重算一致</div>
+      <div class="d">
+        四个 <span class="mono">results.json</span> 的 <span class="mono">total_sessions</span>
+        与 <span class="mono">percent_successful</span>，与从 session 目录重算的值逐项吻合。
+        快照在 resume 后会失效，这次没有。
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">3</span>已知限制（引用时必须一起说）</h2>
+
+<div class="note bad">
+  <b>appworld 的 15 个未完成集中在 5 个任务族。</b>
+  15 题分布在 7 个族里，其中 5 个族占了 13 题
+  （<span class="mono">57c3486 / 396c5a2 / 23cf851</span> 各 3 题、
+  <span class="mono">6c2c621 / 530b157</span> 各 2 题），
+  剩下 <span class="mono">68ee2c9 / 37a8675</span> 各 1 题。
+  同一个族反复卡住说明是<b>该族工具语义的固有难度</b>，不是随机噪声。
+  appworld 42.11% 的成功率里，这部分风险是可复现的。
+</div>
+
+<div class="note bad">
+  <b>有两层步数预算，14/15 个未完成撞的是 agent 层 24 轮。</b>
+  上一版这里写「100 步只有 1 题撞到、加预算不成立」，<b>那个结论是错的</b>，
+  因为把两个不同的计数器混成了一个：
+  <br><br>
+  ① <b>run 层 <span class="mono">max_steps=100</span></b>：benchmark 动作数，
+  就是表里的 <span class="mono">steps</span>。只有
+  <span class="mono">7bf709f3</span>（得分 0.6）撞到，标为
+  <span class="mono">limit_reached</span>。
+  <br>
+  ② <b>agent 层 <span class="mono">max_steps=24</span></b>：
+  <span class="mono">agentcore_agent.py</span> 的默认值，
+  <b>run 的 <span class="mono">agent_kwargs</span> 里没有覆盖它</b>。
+  它数的是 <b>LLM 调用轮数</b>，一轮可以发多个 tool call，所以 24 轮
+  对应了 23–93 个 benchmark 动作。日志末尾 14 条全是
+  <span class="mono">reason=step_limit steps=24</span>。
+  <br><br>
+  15 题<b>全部没调用过 <span class="mono">finish</span></b>
+  （appworld 把 <span class="mono">supervisor__complete_task</span> 映射成
+  <span class="mono">finish</span>，只有调它才置 <span class="mono">is_finished=True</span>），
+  15/15 的最终答案是 <span class="mono">&lt;&lt;not_given&gt;&gt;</span>。
+  上一版据此猜测「<span class="mono">23cf851_1/2/3</span> 只差一次收尾调用」——
+  <b>这个猜测已被附录 A 的实测推翻</b>：给足预算后三题确实调用了
+  <span class="mono">finish</span>，但提交的答案分别是
+  <span class="mono">7 / 44 / 21</span>（真值 <span class="mono">11 / 79 / 26</span>），
+  得分仍是 0.5。<span class="mono">&lt;&lt;not_given&gt;&gt;</span>
+  掩盖的不是「算对了没交」，而是「答案本身也算错了」。
+  <br><br>
+  「加预算能不能提分」不再是开放问题，实测结论见<b>附录 A</b>：
+  成功数 <span class="mono">0/6 → 0/6</span>。
+</div>
+
+<div class="note">
+  <b>每题全量注入 468 个工具，schema 占 274,238 字符。</b>
+  <span class="mono">session.json</span> 平均 529 KB，10 个 app 的全部 API
+  一次性塞进上下文；<span class="mono">appworld_eval.py</span> 明确
+  <span class="mono">if app == "api_docs": continue</span>，
+  把官方自带的 4 个按需检索元工具跳过了。
+  好消息是<b>选择本身没出错</b>：1,791 个动作里
+  <span class="mono">validation.valid=False</span> 为 <b>0</b>，
+  每题实际只用到约 7 种工具。所以问题不在「选不准」，
+  而在<b>固定 schema 开销挤占上下文</b>——
+  那条 <span class="mono">ContextBudgetError</span> 的原文就是
+  「request, tool evidence <b>and schemas</b> exceed the model's context window」。
+  15 个未完成的动作里 89–99% 是 <span class="mono">show_*/search_*</span> 读操作，
+  大量重复同一查询，属于典型的检索循环。
+  <b>这条推断已由附录 B 的对照实验直接验证</b>：改成按需 schema 后，
+  同样 6 题的成功数从 <span class="mono">0/6</span> 变为 <span class="mono">3/6</span>；
+  <b>附录 C</b> 把范围扩到全部 15 个未完成题，得到
+  <span class="mono">v2 0/15 → 3/15</span>。
+</div>
+
+<div class="note">
+  <b>cost / token / llm_time 在这批数据里恒为 0，不可引用。</b>
+  根因已定位并修复（agentcore 用 httpx 直连端点、绕过 LiteLLM，
+  所以 <span class="mono">trace_logger</span> 从不触发），但<b>修复只对重跑生效</b>，
+  这 335 条记录的成本字段仍然无效。
+</div>
+
+<div class="note info">
+  <b>本表只描述 v2，不含与 legacy 的任何比较。</b>
+  这是一次单臂（single-arm）数据质量校验。要得出「v2 比 legacy 好/差」，
+  需要成对比较，且 legacy 侧存在本体量缺口（appworld 57 题里只有 36 题有结果）——
+  那属于另一个问题，本表不作任何暗示。
+</div>
+
+<h2><span class="n">4</span>结论</h2>
+
+<p>
+  <b>v2 的数据可以作为结果使用。</b> 八项校验里七项通过：结构完整、配置统一、
+  记录合法、分桶正确、错误按文本归类干净、未完成判定经 benchmark 自身复核、
+  快照与重算一致。没有任何一项发现会改变上表的数字。
+</p>
+
+<p>
+  唯一需要标注的是 <b><span class="mono">error_source</span> 字段本身的取值</b>
+  （10 agent / 6 infra）与事后按文本重分类的结论（16/16 infra）不一致。
+  分歧的 10 条已逐条查证为传输超时与上下文超限，<b>归因结论以文本为准是对的</b>，
+  但那个落盘字段在后续分析里不能再被直接引用。修复已进代码，只对重跑生效。
+</p>
+
+<p>
+  四处必须随表引用的限定，已写在上一节：appworld 的未完成成族分布、
+  <b>两层步数预算且 14 题撞的是 agent 层 24 轮</b>、成本字段无效、
+  以及每题注入 468 个工具（schema 274,238 字符）带来的上下文压力。
+  这四条都不动摇成功率本身，但会改变「为什么是这个数」的解释，所以不能省略。
+  <b>附录 A</b> 给出：把 agent 层预算翻倍只修好了标签，没有修好题目。
+  <b>附录 B</b> 进一步给出：把 468 个工具的 schema 改成按需取用后，
+  同 6 题成功数 <span class="mono">0/6 → 3/6</span>、总得分
+  <span class="mono">1.600 → 4.733</span>，直接印证了「上下文压力」这条限定的因果地位。
+  附录 A、B 是小样本诊断实验，<b>附录 C</b> 覆盖了全部 15 个未完成题
+  （<span class="mono">0/15 → 3/15</span>，总得分 <span class="mono">2.950 → 11.132</span>），但三者都<b>不是全 57 题的正式 A/B</b>，
+  不改变第 1 节主表的任何数字。
+</p>
+
+<h2><span class="n">A</span>补充实验：agent 层 max_steps 24 → 48</h2>
+
+<p>
+  只改一个量：<span class="mono">agent_kwargs.max_steps</span> 由默认 24 提到 48，
+  其余全部照抄 v2（模型、<span class="mono">model_timeout=900</span>、
+  <span class="mono">http_timeout=600</span>、run 层
+  <span class="mono">max_steps=100 / max_actions=100</span>、1 worker）。
+  从 15 个未完成里挑 6 题：3 个曾被判断「只差一次 <span class="mono">finish</span>」，
+  3 个真失败较多。新 run <span class="mono">pilot-maxsteps48</span>，
+  6 题串行 35.6 分钟，端点 USTC VPN 直连。启动前已预检：
+  <span class="mono">AgentcoreAgent.max_steps</span> 与
+  <span class="mono">_get_instance_kwargs()</span> 均为 48。
+</p>
+
+<table>
+  <thead>
+    <tr><th>task_id</th><th>v2（24 轮）</th><th>pilot（48 轮）</th><th>得分</th>
+        <th>步数</th><th>finish 提交</th><th>真值</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>23cf851_1</td><td>unfinished</td><td>unsuccessful</td><td>0.5 → 0.5</td><td>24 → 47</td><td>7</td><td>11</td></tr>
+    <tr><td>23cf851_2</td><td>unfinished</td><td>unsuccessful</td><td>0.5 → 0.5</td><td>24 → 46</td><td>44</td><td>79</td></tr>
+    <tr><td>23cf851_3</td><td>unfinished</td><td>unsuccessful</td><td>0.5 → 0.5</td><td>23 → 56</td><td>21</td><td>26</td></tr>
+    <tr><td>68ee2c9_1</td><td>unfinished</td><td>unfinished</td><td>0.0 → 0.0</td><td>93 → 93</td><td>—</td><td>—</td></tr>
+    <tr><td>396c5a2_1</td><td>unfinished</td><td>unsuccessful</td><td>0.0 → 0.0</td><td>34 → 54</td><td>长文本答案</td><td>—</td></tr>
+    <tr><td>530b157_1</td><td>unfinished</td><td>unsuccessful</td><td>0.1 → 0.1</td><td>36 → 54</td><td>自述无法完成</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<p>
+  汇总：成功 <b>0/6 → 0/6</b>；已结束 <b>0/6 → 5/6</b>；
+  总得分 <b>1.600 → 1.600</b>；通过断言 <b>4/27 → 4/27</b>；
+  总步数 234 → 350。5 题的标签从
+  <span class="mono">unfinished</span> 变为 <span class="mono">unsuccessful</span>，
+  1 题仍是 <span class="mono">unfinished</span>。
+  <b>标签变诚实了，题目一道也没做对。</b>
+</p>
+
+<div class="note bad">
+  <b>加预算能让 agent 收尾，不能让它做对。</b>
+  ① 三题「只差一次 <span class="mono">finish</span>」的猜测被证伪：
+  给足预算后它们确实提交了答案，但 <span class="mono">7/11</span>、
+  <span class="mono">44/79</span>、<span class="mono">21/26</span> 全错，
+  得分与通过断言数一字未变。
+  <span class="mono">&lt;&lt;not_given&gt;&gt;</span> 掩盖的是「答案也算错了」，
+  不是「算对了没交」。
+  <br><br>
+  ② 唯一仍未完成的是 <span class="mono">68ee2c9_1</span>，它<b>不是撞步数</b>：
+  第 93 步抛 <span class="mono">ContextBudgetError</span>
+  （「request, tool evidence <b>and schemas</b> exceed the model's context window」），
+  agent 随后返回 <span class="mono">None action</span>，run 日志记为
+  「Session 4 ended by agent」。加步数反而更快把上下文撑爆——
+  这是指向<b>按需工具 schema（路由）</b>的直接证据，而不是继续加预算。
+  <br><br>
+  ③ <span class="mono">530b157_1</span> 用掉 47/48 轮，最后提交
+  <span class="mono">finish(status="fail")</span>，自述找不到电话号码。
+  剩下的问题是解题能力与信息可达性，不是预算。
+</div>
+
+<div class="note">
+  <b>实验边界与一个混淆变量。</b>
+  只跑了 6/15 题、只测 48 这一个值、单次运行无重复（LLM 有随机性）；
+  这个结论不能外推到「任何预算值都无效」。
+  另外新 run 因源码指纹变化重建了 agentcore venv，带入了
+  <span class="mono">max_argument_corrections</span> 由硬编码 0 变为 runtime 默认 2
+  的改动（v2 跑于 11-14 14:56，该修复在 22:14）。该偏差<b>偏向有利于新配置</b>，
+  而新配置仍 0/6 成功，所以「加预算无效」是保守结论。
+  <span class="mono">error_source</span> 的修复只影响 error 分类，
+  本批 6 题无 error 状态。  逐题数据见
+  <span class="mono">maxsteps48-pilot.csv</span>。
+</div>
+
+<h2><span class="n">B</span>补充实验：按需工具 schema（468 → 6 个工具）</h2>
+
+<p>
+  附录 A 把瓶颈指向了<b>每轮固定注入的 274,238 字符参数 schema</b>，而不是步数。
+  本附录把这一点做成可开关的实现并实测。新增
+  <span class="mono">benchmark_kwargs.tool_schema_mode</span>：默认
+  <span class="mono">full</span> 保持 v2 行为（实测 policy 与 v2
+  <span class="mono">session.json</span> <b>逐字节一致</b>）；
+  <span class="mono">on_demand</span> 只暴露 AppWorld 官方自带的 4 个
+  <span class="mono">api_docs__*</span> 发现工具、<span class="mono">finish</span>，
+  以及 1 个通用执行入口
+  <span class="mono">call_api(app_name, api_name, arguments)</span>。
+  agent 先读 <span class="mono">show_api_doc</span> 拿到参数名，再执行。
+</p>
+
+<p>
+  实测注入量：<b>468 → 6 个工具</b>，参数 schema
+  <b>274,037 → 2,267 字符（−99.17%）</b>，OpenAI tools wire 体积
+  346,329 → 3,285 字节。改动落在
+  <span class="mono">appworld_benchmark.py</span>（新增开关字段）与
+  <span class="mono">appworld_eval.py</span>（工具过滤、
+  <span class="mono">_register_call_api()</span>、
+  <span class="mono">apply_action</span> 的转发与 finish 保护、
+  on_demand 下追加发现流程说明）。
+</p>
+
+<p>
+  <b>单变量对照</b>：与 <span class="mono">pilot-maxsteps48</span> 相比，
+  唯一行为差异是 <span class="mono">tool_schema_mode</span>；同一 6 题、
+  同一模型、<span class="mono">agent_kwargs.max_steps=48</span>、run 层 100 步预算、
+  900/600 秒 timeout、1 worker。新 run
+  <span class="mono">pilot-ondemand</span>，6 题串行 <b>9.3 分钟</b>。
+  运行时逐题核实 <span class="mono">session.json</span> 注入 6 个工具、
+  <span class="mono">config.benchmark_kwargs.tool_schema_mode="on_demand"</span>。
+</p>
+
+<table>
+  <thead>
+    <tr><th>task_id</th><th>v2 (full/24)</th><th>pilot48 (full/48)</th>
+        <th>on_demand (6/48)</th><th>得分</th><th>步数</th><th>提交 / 真值</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>23cf851_1</td><td>unfinished 0.5</td><td>unsuccessful 0.5</td>
+        <td class="ok"><b>success 1.0</b></td><td>0.5 → 1.0</td><td>24 → 47 → 9</td><td>11 / 11</td></tr>
+    <tr><td>23cf851_2</td><td>unfinished 0.5</td><td>unsuccessful 0.5</td>
+        <td class="ok"><b>success 1.0</b></td><td>0.5 → 1.0</td><td>24 → 46 → 11</td><td>79 / 79</td></tr>
+    <tr><td>23cf851_3</td><td>unfinished 0.5</td><td>unsuccessful 0.5</td>
+        <td class="ok"><b>success 1.0</b></td><td>0.5 → 1.0</td><td>23 → 56 → 11</td><td>26 / 26</td></tr>
+    <tr><td>68ee2c9_1</td><td>unfinished 0.0</td><td>unfinished 0.0</td>
+        <td>limit_reached 0.0</td><td>0.0 → 0.0</td><td>93 → 93 → 100</td><td>—</td></tr>
+    <tr><td>396c5a2_1</td><td>unfinished 0.0</td><td>unsuccessful 0.0</td>
+        <td>unsuccessful 0.833</td><td>0.0 → 0.833</td><td>34 → 54 → 16</td><td>5/6 断言通过</td></tr>
+    <tr><td>530b157_1</td><td>unfinished 0.1</td><td>unsuccessful 0.1</td>
+        <td>unsuccessful 0.9</td><td>0.1 → 0.9</td><td>36 → 54 → 22</td><td>9/10 断言通过</td></tr>
+    <tr class="total"><td>合计</td><td>0/6 成功</td><td>0/6 成功</td>
+        <td class="ok">3/6 成功</td><td>1.600 → 4.733</td><td>234 → 350 → 169</td>
+        <td>通过断言 4 → 4 → 20</td></tr>
+  </tbody>
+</table>
+
+<div class="note good">
+  <b>三个 1.0 是真实做对，不是标签变化。</b>
+  提交答案 <span class="mono">11 / 79 / 26</span> 与真值逐一相符，
+  每题 2/2 断言通过、0 条失败，均调用了 <span class="mono">finish</span>。
+  附录 A 里同样的三题在 48 轮全量 schema 下提交的是
+  <span class="mono">7 / 44 / 21</span>（全错）——
+  <b>同一模型、同一预算，只把 schema 挪出上下文，答案就从错变对</b>。
+  <br><br>
+  <b>改善不是靠 48 轮预算。</b> 三题只用了
+  <span class="mono">13 / 18 / 16</span> 个 LLM 轮，全部在 v2 的 24 轮以内；
+  步数 47/46/56 → 9/11/11，耗时 7.8/5.9/3.8 → 1.0/1.3/1.2 分钟。
+  附录 A 里「加预算无效」与这里「减 schema 有效」并不矛盾：
+  前者在拥挤的上下文里多给轮数，后者把上下文腾给了推理。
+  <br><br>
+  <b>上下文爆掉的问题消失了。</b> 唯一仍为失败的
+  <span class="mono">68ee2c9_1</span> 不再抛
+  <span class="mono">ContextBudgetError</span>，改为撞 run 层 100 步动作预算
+  （<span class="mono">limit_reached</span>）。但它 19 轮里发了 92 次
+  <span class="mono">call_api</span>，仍陷在调用循环中——
+  瓶颈从「上下文」换成了「检索策略」，这道题仍需要单独处理。
+</div>
+
+<div class="note info">
+  <b>按需机制的代价实测为零（本样本内）。</b>
+  6 题共 169 个动作，<span class="mono">validation.valid=False</span> 为 <b>0</b>、
+  API 返回错误为 <b>0</b>；每题先调用 5–12 次发现工具再执行。
+  <span class="mono">23cf851_1</span> 的完整 9 步是教科书式的按需发现：
+  <span class="mono">show_api_descriptions(venmo)</span> →
+  <span class="mono">show_api_doc(venmo.show_transactions)</span> →
+  查 supervisor 密码文档 → <span class="mono">call_api</span> 取密码 →
+  查 <span class="mono">venmo.login</span> 文档 → 登录 → 查交易 →
+  <span class="mono">finish(11)</span>。
+  但 <span class="mono">call_api.arguments</span> 是自由 JSON 对象，
+  绕过了原先 pydantic 的逐参数校验；<b>附录 C 已在全部 15 题上专门核查这类错误</b>：
+  仍无参数类型错误，但出现 1 次发现工具猜错 API 名，
+  以及 4 次业务规则拒绝（详见附录 C 结论三）。
+</div>
+
+<div class="note bad">
+  <b>边界：这是小样本诊断，不是新的成功率。</b>
+  附录 B 只跑了 6/15 个未完成题，且是<b>刻意挑的</b>（3 个曾被判「只差 finish」+
+  3 个真失败较多），不是随机样本；<b>这一取样限制已由附录 C 的全量 15 题补上</b>。
+  两者都是单次运行、LLM 有随机性，且只测了
+  <span class="mono">on_demand + max_steps=48</span> 这一种组合。
+  因此<b>不能</b>外推成「v2 全 57 题应该更高」，也<b>不能</b>改写第 1 节主表。
+  要正式采用这个改动，仍需全量 A/B。
+  <br><br>
+  <b>环境差异必须披露。</b> 本次启动时 appworld 的
+  <span class="mono">setup.sh</span> 需 <span class="mono">git clone</span> GitHub，
+  在 USTC VPN 直连下 TLS 握手失败，故未重建 venv：
+  改用与 pilot48 <b>同一份</b> appworld venv，把两个改动的 adapter
+  文件同步进 venv 的源码拷贝，并把安装标记更新为当前源码指纹。
+  这反而让对照更干净——两轮用的是同一份物理环境，
+  没有附录 A 里那种「重建 venv 带入额外代码变化」的混淆。
+  端点仍为 USTC VPN 直连、无代理。
+  <br><br>
+  逐题数据见 <span class="mono">ondemand-pilot.csv</span>，
+  可复现配置见 <span class="mono">pilot-ondemand.config.json</span>。
+</div>
+
+<h2><span class="n">C</span>补充实验：全部 15 个未完成题（全量验证）</h2>
+
+<p>
+  附录 B 只在 6 题上验证按需 schema，且样本是刻意挑的。本附录把范围扩到
+  <b>v2 里全部 15 个未完成题</b>：
+  <span class="mono">status=unfinished</span> 的 14 题，加上
+  <span class="mono">status=limit_reached</span> 但
+  <span class="mono">is_finished=False</span> 的 1 题（<span class="mono">57c3486_1</span>），
+  口径与第 3 节「15 个未完成」完全一致。
+</p>
+
+<p>
+  <b>单变量完整性</b>：新 run <span class="mono">ondemand-all15</span> 的配置由
+  <span class="mono">pilot-ondemand</span> 逐字段复制，只改 3 个键
+  （<span class="mono">run_id / output_dir / task_ids</span>）；
+  <span class="mono">tool_schema_mode="on_demand"</span>、模型、1 worker、
+  <span class="mono">agent_kwargs.max_steps=48</span>、run 层 100 步预算、
+  900/600 秒 timeout 全部不变。启动时核实两个 venv 的
+  <span class="mono">is_installed=True</span>、安装标记与源码指纹一致、
+  adapter 源码拷贝一致；运行时逐题核实 <span class="mono">session.json</span>
+  注入的是 <b>6 个工具</b>。端点仍为 USTC VPN 直连、无代理。
+</p>
+
+<h3>总体对照</h3>
+
+<table>
+  <thead>
+    <tr><th>指标</th><th>v2（full / 24 轮）</th><th>全量 on_demand（6 工具 / 48 轮）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>成功题数</td><td>0 / 15</td><td class="ok"><b>3 / 15</b></td></tr>
+    <tr><td>总得分</td><td>2.950</td><td class="ok"><b>11.132</b></td></tr>
+    <tr><td>调用 finish（is_finished=True）</td><td>0 / 15</td><td>12 / 15</td></tr>
+    <tr><td>通过 / 失败断言</td><td>12 / 74</td><td class="ok"><b>62 / 24</b></td></tr>
+    <tr><td>总步数</td><td>699</td><td>630</td></tr>
+    <tr><td>总耗时（串行）</td><td>109.7 min</td><td>34.1 min</td></tr>
+    <tr class="total"><td>说明</td><td colspan="2">两侧都是这 15 题，v2 用的是原始 full/24 配置；主表 57 题数字不变</td></tr>
+  </tbody>
+</table>
+
+
+<h3>逐题结果</h3>
+
+<table>
+  <thead>
+    <tr><th>task_id</th><th>v2</th><th>on_demand 全量</th><th>Δ 得分</th>
+        <th>步数 v2 → 新</th><th>通过断言</th><th>发现 / call_api</th>
+        <th>停止原因（✓ = 答案与真值相符）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>23cf851_1</td><td>unfinished 0.5</td><td class="ok">success <b>1.0</b></td><td>+0.500</td><td>24 → 9</td><td>2/2</td><td>5 / 3</td><td>cancelled ✓</td></tr>
+    <tr><td>23cf851_2</td><td>unfinished 0.5</td><td class="ok">success <b>1.0</b></td><td>+0.500</td><td>24 → 11</td><td>2/2</td><td>5 / 5</td><td>cancelled ✓</td></tr>
+    <tr><td>23cf851_3</td><td>unfinished 0.5</td><td class="ok">success <b>1.0</b></td><td>+0.500</td><td>23 → 11</td><td>2/2</td><td>5 / 5</td><td>cancelled ✓</td></tr>
+    <tr><td>37a8675_1</td><td>unfinished 0.0</td><td>unsuccessful <b>0.833</b></td><td>+0.833</td><td>35 → 22</td><td>5/6</td><td>10 / 11</td><td>cancelled</td></tr>
+    <tr><td>396c5a2_1</td><td>unfinished 0.0</td><td>unsuccessful <b>0.833</b></td><td>+0.833</td><td>34 → 17</td><td>5/6</td><td>11 / 5</td><td>cancelled</td></tr>
+    <tr><td>396c5a2_2</td><td>unfinished 0.0</td><td>unsuccessful <b>0.833</b></td><td>+0.833</td><td>37 → 16</td><td>5/6</td><td>9 / 6</td><td>cancelled</td></tr>
+    <tr><td>396c5a2_3</td><td>unfinished 0.0</td><td>unsuccessful <b>0.833</b></td><td>+0.833</td><td>26 → 18</td><td>5/6</td><td>11 / 6</td><td>cancelled</td></tr>
+    <tr><td>530b157_1</td><td>unfinished 0.1</td><td>unsuccessful <b>0.9</b></td><td>+0.800</td><td>36 → 22</td><td>9/10</td><td>12 / 9</td><td>cancelled</td></tr>
+    <tr><td>530b157_3</td><td>unfinished 0.1</td><td>unsuccessful <b>0.9</b></td><td>+0.800</td><td>30 → 18</td><td>9/10</td><td>10 / 7</td><td>cancelled</td></tr>
+    <tr><td>57c3486_1</td><td>limit_reached 0.6</td><td>limit_reached <b>0.6</b></td><td>+0.000</td><td>100 → 100</td><td>3/5</td><td>8 / 92</td><td>cancelled</td></tr>
+    <tr><td>57c3486_2</td><td>unfinished 0.2</td><td>unfinished <b>0.6</b></td><td>+0.400</td><td>84 → 33</td><td>3/5</td><td>7 / 26</td><td></td></tr>
+    <tr><td>57c3486_3</td><td>unfinished 0.2</td><td>unsuccessful <b>0.8</b></td><td>+0.600</td><td>64 → 98</td><td>4/5</td><td>8 / 89</td><td>cancelled</td></tr>
+    <tr><td>68ee2c9_1</td><td>unfinished 0.0</td><td>limit_reached <b>0.0</b></td><td>+0.000</td><td>93 → 100</td><td>0/5</td><td>8 / 92</td><td>cancelled</td></tr>
+    <tr><td>6c2c621_2</td><td>unfinished 0.125</td><td>unsuccessful <b>0.5</b></td><td>+0.375</td><td>40 → 58</td><td>4/8</td><td>11 / 46</td><td>cancelled</td></tr>
+    <tr><td>6c2c621_3</td><td>unfinished 0.125</td><td>unsuccessful <b>0.5</b></td><td>+0.375</td><td>49 → 97</td><td>4/8</td><td>11 / 85</td><td>cancelled</td></tr>
+  </tbody>
+</table>
+
+
+<h3>按任务族汇总</h3>
+
+<table>
+  <thead><tr><th>任务族</th><th>题数</th><th>v2 族得分</th><th>on_demand 族得分</th>
+          <th>Δ</th><th>成功</th></tr></thead>
+  <tbody>
+    <tr><td>23cf851</td><td>3</td><td>1.500</td><td class="ok">3.000</td><td>+1.500</td><td>3 / 3</td></tr>
+    <tr><td>37a8675</td><td>1</td><td>0.000</td><td class="ok">0.833</td><td>+0.833</td><td>0 / 1</td></tr>
+    <tr><td>396c5a2</td><td>3</td><td>0.000</td><td class="ok">2.499</td><td>+2.499</td><td>0 / 3</td></tr>
+    <tr><td>530b157</td><td>2</td><td>0.200</td><td class="ok">1.800</td><td>+1.600</td><td>0 / 2</td></tr>
+    <tr><td>57c3486</td><td>3</td><td>1.000</td><td class="ok">2.000</td><td>+1.000</td><td>0 / 3</td></tr>
+    <tr><td>68ee2c9</td><td>1</td><td>0.000</td><td>0.000</td><td>+0.000</td><td>0 / 1</td></tr>
+    <tr><td>6c2c621</td><td>2</td><td>0.250</td><td class="ok">1.000</td><td>+0.750</td><td>0 / 2</td></tr>
+  </tbody>
+</table>
+
+
+<div class="note good">
+  <b>结论一：改善不是靠挑题挑出来的，但也确实没有新增成功题。</b>
+  v2 的 15 题合计 2.950 分、0 题成功、
+  通过断言 12 条；改成按需 schema 后为
+  <b>11.132 分、3 题成功、通过断言 62 条</b>，
+  失败断言 74 → 24。
+  <b>13/15 题得分提高、2 题持平、0 题下降</b>，
+  6/7 个任务族得分提高；
+  附录 B 之外的 9 题里有 <b>8 题</b>得分提高，
+  从 0～0.6 提升到 0.5～0.9。
+  v2 里 15/15 从未调用 <span class="mono">finish</span>，现在
+  12/15 调用并置 <span class="mono">is_finished=True</span>。
+  <br><br>
+  但要说清楚：<b>3 个成功题仍是附录 B 里那 3 题（23cf851_1/2/3）</b>，
+  新增 9 题全部变成 <span class="mono">unsuccessful / limit_reached / unfinished</span>，
+  只是分数明显提高。唯一完全没动的是
+  <span class="mono">68ee2c9_1</span>（0.0 → 0.0，仍撞 100 步动作预算），
+  它和 <span class="mono">57c3486_1</span> 都陷在 92 次
+  <span class="mono">call_api</span> 的调用循环里。
+</div>
+
+<div class="note info">
+  <b>结论二：6 题复跑可复现。</b>
+  附录 B 的 6 题在本 run 中同配置重跑，
+  得分完全一致 <b>6/6</b>、
+  成功判定完全一致 <b>6/6</b>。
+  这把「LLM 随机性凑巧」这一解释的权重压低了，但它仍是<b>同一份配置、
+  同一份物理环境</b>下的重复，不等于跨环境/跨模型的外部验证。
+</div>
+
+<div class="note info">
+  <b>结论三：按需机制的代价在全量样本里仍然很低，但不是零。</b>
+  15 题共 630 个动作：
+  <span class="mono">validation.valid=False</span> <b>0</b> 次、
+  试图绕过 <span class="mono">finish</span> 直接完成任务的 <b>0</b> 次；
+  发现工具调用 131 次、<span class="mono">call_api</span>
+  487 次。<span class="mono">ContextBudgetError</span>
+  出现 <b>0</b> 次。
+  观察结果里的 API 错误共 <b>5</b> 次，
+  <b>全部集中在 37a8675_1 一题</b>：1 次是
+  <span class="mono">show_api_doc</span> 猜错 API 名（phone_contacts 不存在），
+  另外 4 次是 Venmo 返回「余额/银行卡不足 $91」的
+  <b>业务规则拒绝</b>，不是参数类型错误。也就是说
+  <span class="mono">call_api.arguments</span> 自由 JSON 绕过 pydantic 校验
+  的潜在风险在这 15 题里<b>没有变成参数错误</b>，但发现工具猜错名字
+  这一类是按需模式特有的新代价。
+  <br><br>
+  <b>轮数因素要单独披露</b>：最大 LLM 轮数 34，
+  12/14 题的 LLM 轮数不超过 v2 的 24 轮预算，
+  但 <b>2 题</b>（6c2c621_2, 6c2c621_3）用了 26 / 34 轮，
+  这两题的改善<b>不能排除 48 轮预算的贡献</b>。
+  停止原因分布：(无 stop 日志) × 1, cancelled × 14；状态分布：limit_reached × 2, success × 3, unfinished × 1, unsuccessful × 9。
+</div>
+
+<div class="note bad">
+  <b>一条必须披露的运行异常：57c3486_2 不是正常终止。</b>
+  它在第 34 轮遭遇
+  <span class="mono">FatalRunError: capability (ModelError: Model HTTP request rejected)</span>，
+  runtime 直接中止，因此是唯一一个没有
+  <span class="mono">Runtime stopped</span> 日志、也没有调用
+  <span class="mono">finish</span> 的 session；benchmark 仍按当时状态评分
+  （0.6，3/5 断言通过），落盘状态为 <span class="mono">unfinished</span>。
+  这是<b>端点侧的一次性 infra 失败</b>，不是按需 schema 引起的，
+  但它意味着这题的 0.6 是「被截断时的中间状态」，不能与其余 14 题的
+  完整终止等同看待。其余 14 题的日志里
+  <span class="mono">ContextBudgetError</span> 与超时均为 0。
+</div>
+
+<div class="note bad">
+  <b>边界：这仍不是新的官方成功率。</b>
+  只重跑了 appworld-dev 57 题里原本未完成的 15 题，
+  <b>没有</b>重跑其余 42 题，也没有做全 57 题的正式 A/B；
+  单次运行、无跨环境重复，LLM 有随机性；只测了
+  <span class="mono">on_demand + 48</span> 一种组合，
+  <b>还未拆分「省上下文」与「加预算」两个因素</b>
+  （缺 <span class="mono">on_demand + 24</span> 组合）。
+  因此第 1 节主表的 <span class="mono">appworld-dev 24/57 = 42.11%</span>
+  一字未改；本附录的数字只能读作「这 15 题在按需 schema 下能做到什么」，
+  不能读作「v2 若换配置应该是多少」。
+  <br><br>
+  逐题数据见 <span class="mono">ondemand-all15.csv</span>，
+  可复现配置见 <span class="mono">ondemand-all15.config.json</span>；
+  原始记录在 WSL <span class="mono">outputs/ondemand-all15/</span>，
+  未污染 v2、pilot48 或 pilot-ondemand。
+</div>
+
+<p class="dim" style="font-size:13px">
+  校验脚本：<span class="mono">scripts/audit_baseline.py</span>（结构）、
+  <span class="mono">scripts/compare_metrics.py</span>（指标口径与
+  <span class="mono">error_class()</span>）、
+  本次临时校验（记录级合法性、分桶、归因交叉、unfinished 复核）。
+  <b>主表</b>数据源自
+  <span class="mono">outputs/&lt;run&gt;/&lt;run&gt;/sessions/*/results.json</span>，
+  共 335 个目录，不是 run 级聚合快照；附录 A/B/C 另取自
+  <span class="mono">outputs/pilot-maxsteps48/</span>、
+  <span class="mono">outputs/pilot-ondemand/</span>、
+  <span class="mono">outputs/ondemand-all15/</span>，均为逐题原始记录重算。
+</p>
+
+<div class="foot">
+  仅 v2 主表 · 未重跑 legacy · 主体生成于 2026-11-14 ·
+  附录 A（max_steps 对照）、附录 B（按需 schema 对照）与
+  附录 C（全部 15 个未完成题）更新于 2026-11-15 ·
+  三个附录均为诊断实验，不改变主表数字
+</div>
+
+</div>
+</body>
+</html>

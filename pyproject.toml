@@ -19,7 +19,10 @@ dependencies = [
     "filelock>=3,<4",
     "click>=8.1.7,<9",
     "json-schema-to-pydantic>=0.4,<1",
-    "litellm>=1.65.0,!=1.82.7,!=1.82.8,<2",
+    # litellm 1.109 removed the "disk" cache type, which
+    # integrations/litellm/config.py still passes. The upper bound matches
+    # uv.lock; widen it only after moving off the disk cache.
+    "litellm>=1.83.4,!=1.82.7,!=1.82.8,<1.109",
     "mcp>=1.24,<2",
     "pydantic>=2.12.5,<2.13",
     "python-dotenv>=1,<2",

@@ -1,0 +1,137 @@
+{
+  "appworld-dev": {
+    "counts": {
+      "planned": 57,
+      "executed": 57,
+      "success": 24,
+      "unsuccessful": 14,
+      "unfinished": 15,
+      "error": 4,
+      "model": "openai/qwen3.8-reasoner"
+    },
+    "steps_median": 26,
+    "steps_max": 100,
+    "duration": {
+      "median_min": 4.37,
+      "p90_min": 8.74,
+      "max_min": 16.12,
+      "total_min": 273.0,
+      "top10pct_time_share_pct": 20.9
+    },
+    "model_timeout": 900,
+    "http_timeout": 600,
+    "error_source_stored": {
+      "agent": 3,
+      "infra": 1
+    },
+    "error_class_recomputed": {
+      "infra": 4
+    }
+  },
+  "airline": {
+    "counts": {
+      "planned": 50,
+      "executed": 50,
+      "success": 32,
+      "unsuccessful": 15,
+      "unfinished": 0,
+      "error": 3,
+      "model": "openai/qwen3.8-reasoner"
+    },
+    "steps_median": 10.0,
+    "steps_max": 28,
+    "duration": {
+      "median_min": 4.49,
+      "p90_min": 10.69,
+      "max_min": 14.39,
+      "total_min": 265.1,
+      "top10pct_time_share_pct": 23.6
+    },
+    "model_timeout": 600,
+    "http_timeout": 600,
+    "error_source_stored": {
+      "agent": 2,
+      "infra": 1
+    },
+    "error_class_recomputed": {
+      "infra": 3
+    }
+  },
+  "retail": {
+    "counts": {
+      "planned": 114,
+      "executed": 114,
+      "success": 87,
+      "unsuccessful": 21,
+      "unfinished": 0,
+      "error": 6,
+      "model": "openai/qwen3.8-reasoner"
+    },
+    "steps_median": 11.0,
+    "steps_max": 21,
+    "duration": {
+      "median_min": 2.88,
+      "p90_min": 4.24,
+      "max_min": 12.0,
+      "total_min": 344.5,
+      "top10pct_time_share_pct": 20.9
+    },
+    "model_timeout": 600,
+    "http_timeout": 600,
+    "error_source_stored": {
+      "infra": 3,
+      "agent": 3
+    },
+    "error_class_recomputed": {
+      "infra": 6
+    }
+  },
+  "telecom": {
+    "counts": {
+      "planned": 114,
+      "executed": 114,
+      "success": 86,
+      "unsuccessful": 25,
+      "unfinished": 0,
+      "error": 3,
+      "model": "openai/qwen3.8-reasoner"
+    },
+    "steps_median": 11.5,
+    "steps_max": 26,
+    "duration": {
+      "median_min": 4.96,
+      "p90_min": 11.27,
+      "max_min": 23.24,
+      "total_min": 691.2,
+      "top10pct_time_share_pct": 24.4
+    },
+    "model_timeout": 600,
+    "http_timeout": 600,
+    "error_source_stored": {
+      "agent": 2,
+      "infra": 1
+    },
+    "error_class_recomputed": {
+      "infra": 3
+    }
+  },
+  "_totals": {
+    "executed": 335,
+    "success": 229,
+    "unsuccessful": 75,
+    "unfinished": 15,
+    "error": 16,
+    "success_rate_pct": 68.36,
+    "error_rate_pct": 4.78,
+    "wall_clock_total_min_serial": 1574.0,
+    "error_breakdown_by_text": {
+      "context_budget": 1,
+      "protocol_error": 2,
+      "transport_timeout": 9,
+      "model_http": 4
+    },
+    "note_distinct_task_ids": 285,
+    "note_cross_run_shared_task_ids": 50,
+    "note_cross_run_shared_between": "airline,retail"
+  }
+}

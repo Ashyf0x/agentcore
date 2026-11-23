@@ -1,0 +1,16 @@
+# Runtime dependencies of the vendored agentcore tree.
+#
+# The runtime is vendored under this package (context/, core/, memory/,
+# observability/, storage/, tools/), so nothing has to be pip-installed from an
+# upstream repository. These are what that code imports.
+#
+# `runtime_path` still works for pointing a run at an external checkout instead
+# of the snapshot here; that path needs the same packages plus whatever the
+# checkout's own pyproject.toml declares.
+httpx>=0.28,<1
+jsonschema>=4.23,<5
+# Imported lazily by the optional context-window budget. Without it (or without
+# its encodings, which download on first use -- pre-populate TIKTOKEN_CACHE_DIR
+# on offline hosts) the budget still applies, using the serialized byte count as
+# a conservative upper bound on tokens.
+tiktoken>=0.8,<1

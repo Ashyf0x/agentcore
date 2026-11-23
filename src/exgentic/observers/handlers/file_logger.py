@@ -18,6 +18,7 @@ from ...core.types import Action, Observation, SessionResults, SessionScore
 from ...interfaces.registry import get_agent_entries, get_benchmark_entries
 from ..logging import get_logger
 from .session_ledger import SessionLedger
+from .session_refs import local_session_id, local_task_id
 
 
 class FileLoggerObserver(Observer):
@@ -82,9 +83,9 @@ class FileLoggerObserver(Observer):
 
     def on_session_start(self, session, agent, observation) -> None:
         self._ensure_logger()
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.register(session_id)
-        self._logger.info("▶️  Starting Session %s (logs: %s)", session_number, session.paths.root)
+        self._logger.info("▶️  Starting Session %s (logs: %s)", session_number, self._session_root(session_id))
         if isinstance(observation, Observation):
             self._logger.info("⏺️  Recorded Start Session %s", session_number)
 
@@ -142,22 +143,36 @@ class FileLoggerObserver(Observer):
             error_source = "agent"
         elif isinstance(error, BenchmarkError):
             error_source = "benchmark"
+        root_error = error.error if isinstance(error, (AgentError, BenchmarkError)) else None
+        # See ``ResultsHandler.on_session_error``: an agent that knows the fault
+        # was infrastructural downgrades the label, so the log line does not
+        # blame the agent for an endpoint failure.
+        if getattr(root_error, "error_source", None) == "infra":
+            error_source = "infra"
         if isinstance(error, (SessionCancelError, RunCancelError, KeyboardInterrupt)):
             self._set_reason(session, "cancelled by user", overwrite=True)
             error_source = "cancelled"
         else:
             if error_source == "agent":
                 reason = "terminated by agent exception"
+            elif error_source == "infra":
+                reason = "terminated by infrastructural exception"
             elif error_source == "benchmark":
                 reason = "terminated by benchmark exception"
             else:
                 reason = "terminated by unexpected exception (see console)"
             self._set_reason(session, reason, overwrite=True)
-            session_id = session.session_id if session else None
+            session_id = local_session_id(session) if session else None
             detail = self._format_error_detail(error)
             if error_source == "agent":
                 self._logger.error(
                     "Agent error in session %s: %s",
+                    session_id or "-",
+                    detail,
+                )
+            elif error_source == "infra":
+                self._logger.error(
+                    "Infrastructure error in session %s: %s",
                     session_id or "-",
                     detail,
                 )
@@ -182,9 +197,9 @@ class FileLoggerObserver(Observer):
 
     def on_session_scoring(self, session) -> None:
         self._ensure_logger()
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.get_number(session_id)
-        self._logger.info("⏳ Scoring Session %s (logs: %s)", session_number, session.paths.root)
+        self._logger.info("⏳ Scoring Session %s (logs: %s)", session_number, self._session_root(session_id))
 
     def _log_save(self) -> None:
         self._ensure_logger()
@@ -192,13 +207,13 @@ class FileLoggerObserver(Observer):
         self._logger.info("💾 Saving results to %s", rp.root)
 
     def _step(self, session) -> tuple[int, int]:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         step_n = self._ledger.increment_steps(session_id)
         session_number = self._ledger.get_number(session_id)
         return step_n, session_number
 
     def _log_session(self, session, score: SessionScore) -> None:
-        session_id = session.session_id
+        session_id = local_session_id(session)
         session_number = self._ledger.get_number(session_id)
         stats = self._ledger.pop_state(session_id)
         execution_time = time.time() - stats.started_at if stats is not None else 0.0
@@ -212,7 +227,7 @@ class FileLoggerObserver(Observer):
         score_text = f"{value}"
         success_emoji = self._success_emoji(success, value, is_finished)
         status = self._status_label(success, is_finished, reason)
-        task_id = session.task_id
+        task_id = local_task_id(session)
         task_id_str = f" | task_id: {task_id}" if task_id else ""
         self._logger.info(
             "%s Completed Session %s | status: %s | score: %s | steps: %s | time: %.1fs%s\n" "logs: %s",
@@ -223,12 +238,12 @@ class FileLoggerObserver(Observer):
             steps,
             execution_time,
             task_id_str,
-            session.paths.root,
+            self._session_root(session_id),
         )
 
     def _log_error(self, where, session, error) -> None:
         self._ensure_logger()
-        session_id = session.session_id if session else None
+        session_id = local_session_id(session) if session else None
         if session_id:
             self._logger.error(
                 "error (%s) session=%s: %s",
@@ -287,7 +302,7 @@ class FileLoggerObserver(Observer):
         return text
 
     def _set_reason(self, session, reason: str, *, overwrite: bool = False) -> None:
-        session_id = session.session_id if session else None
+        session_id = local_session_id(session) if session else None
         if session_id is None:
             return
         with self._lock:
@@ -296,11 +311,19 @@ class FileLoggerObserver(Observer):
             self._session_reasons[session_id] = reason
 
     def _pop_reason(self, session) -> str:
-        session_id = session.session_id if session else None
+        session_id = local_session_id(session) if session else None
         if session_id is None:
             return "ended"
         with self._lock:
             return self._session_reasons.pop(session_id, "ended")
+
+    def _session_root(self, session_id: str):
+        """Resolve a session's directory from the run paths this observer owns.
+
+        ``session.paths`` would be an RPC on a venv-backed session, and these
+        log lines are written on the failure path as well as the happy one.
+        """
+        return self.paths.session(session_id).root
 
     @staticmethod
     def _success_emoji(success: bool, value: float | None, is_finished: bool | None) -> str:

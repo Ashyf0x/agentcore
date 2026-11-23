@@ -82,6 +82,14 @@ def current_run_id() -> str:
 
 
 PROXY_AGENT_NAME = "proxy_agent"
+
+# ``score()`` is invoked by the orchestrator *before* ``close()``. The tau2
+# environment signals termination from inside ``run_domain``, so the runner
+# thread can still be in its teardown/save phase at that point. Wait long
+# enough for it to finish writing the checkpoint before reading or moving it.
+# Bounded so a genuinely wedged runner cannot hang the whole run.
+SCORE_RUNNER_JOIN_TIMEOUT = 90.0
+
 TAU2_TOTAL_TASKS = {
     "mock": 9,
     "retail": 114,
@@ -357,28 +365,59 @@ class TAU2Session(PairableProxySession):
             return str(self._cfg.task_ids[0])
         return ""
 
+    def _resolve_results_path(self, join_timeout: float) -> Path | None:
+        """Return a path holding tau2 results, waiting for the runner first.
+
+        tau2's ``_save`` re-opens ``file_path`` (``open(save_to, "r")``) and
+        rewrites it after every simulation. Moving that file while the runner
+        thread is still alive makes the next save die with FileNotFoundError
+        and discards an already-computed reward. Observed in the airline run
+        of 2026-11-12, task 8 (session 836fbf86): the old 30s join expired
+        seconds before the simulation finished, the move happened, and the
+        reward tau2 had already calculated (COMMUNICATE 1.0 / DB 0.0) was
+        lost. So: never move a live checkpoint. Read it in place instead, and
+        only archive it once nothing can write it anymore. ``close()`` calls
+        this again, so a runner that outlives the join still gets archived.
+        """
+        t = self._runner_thread
+        if t and t.is_alive():
+            t.join(timeout=join_timeout)
+
+        results = Path(self.results_file)
+        if results.exists():
+            return results
+
+        checkpoint = Path(self.file_path) if self.file_path else None
+        if checkpoint is None or not checkpoint.exists():
+            return None
+
+        if t and t.is_alive():
+            self.logger.warning(
+                "TAU2 runner still active; reading checkpoint in place without moving it"
+            )
+            return checkpoint
+
+        results.parent.mkdir(parents=True, exist_ok=True)
+        self.logger.debug("Moving results file")
+        move(str(checkpoint), str(results))
+        self.logger.debug("File move completed")
+        return results
+
     def close(self):
         self.logger.debug("Closing session")
         try:
             super().close()  # This sets self.completed = True
             t = self._runner_thread
             self.logger.debug(f"Thread state: alive={t.is_alive() if t else 'None'}")
+            results = self._resolve_results_path(join_timeout=10.0)
+            self.logger.debug(f"Thread join completed; results={results}")
+            if results is None:
+                self.logger.error("Results file not found")
+                raise FileNotFoundError(
+                    f"TAU2 results file not found for session {self.session_id}: {self.file_path}"
+                )
             if t and t.is_alive():
-                self.logger.debug("Waiting for runner thread")
-                t.join(timeout=10.0)
-                if t.is_alive():
-                    self.logger.warning("Runner thread did not exit cleanly, continuing anyway")
-            self.logger.debug("Thread join completed")
-            if not Path(self.results_file).exists():
-                if self.file_path and Path(self.file_path).exists():
-                    self.logger.debug("Moving results file")
-                    move(self.file_path, self.results_file)
-                    self.logger.debug("File move completed")
-                else:
-                    self.logger.error("Results file not found")
-                    raise FileNotFoundError(
-                        f"TAU2 results file not found for session {self.session_id}: {self.file_path}"
-                    )
+                self.logger.warning("Runner thread did not exit cleanly, continuing anyway")
 
             self.logger.debug("Closing logging")
             if not t or not t.is_alive():
@@ -470,21 +509,28 @@ class TAU2Session(PairableProxySession):
         # Check if the runner thread encountered an error and surface it
         if self._runner_error is not None:
             raise RuntimeError(f"TAU2 runner thread failed with error: {self._runner_error}") from self._runner_error
-        # Ensure the results file is in place.  score() may be called before
-        # close() by the framework, so move the tau2 simulation output now.
-        if not Path(self.results_file).exists():
-            t = self._runner_thread
-            if t and t.is_alive():
-                t.join(timeout=30.0)
-            if self.file_path and Path(self.file_path).exists():
-                Path(self.results_file).parent.mkdir(parents=True, exist_ok=True)
-                move(self.file_path, self.results_file)
+        # score() runs before close(), possibly while tau2 is still saving its
+        # checkpoint. _resolve_results_path waits for the runner and will read
+        # the checkpoint in place rather than moving it out from under a live
+        # writer (see its docstring for the task 8 / 836fbf86 incident).
+        results_path = self._resolve_results_path(
+            join_timeout=SCORE_RUNNER_JOIN_TIMEOUT
+        )
         # No simulation file or empty simulations → agent produced no
         # useful actions.  Score as unsuccessful rather than crashing.
-        if not Path(self.results_file).exists():
+        if results_path is None:
             self.logger.warning("No simulation file produced; scoring as unsuccessful (score=0).")
             return SessionScore(score=0.0, success=False, is_finished=True)
-        res = Results.load(self.results_file)
+        try:
+            res = Results.load(str(results_path))
+        except Exception as exc:
+            # The runner may still be mid-write; never let a partial JSON
+            # crash the whole session.
+            self.logger.warning(
+                "Could not read TAU2 results (%s); scoring as unsuccessful (score=0).",
+                exc,
+            )
+            return SessionScore(score=0.0, success=False, is_finished=True)
         if not res.simulations:
             self.logger.warning("No simulations in results; scoring as unsuccessful (score=0).")
             return SessionScore(score=0.0, success=False, is_finished=True)

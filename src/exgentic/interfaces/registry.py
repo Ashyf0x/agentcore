@@ -133,6 +133,13 @@ BENCHMARKS: dict[str, RegistryEntry] = {
 }
 
 AGENTS: dict[str, RegistryEntry] = {
+    "agentcore": RegistryEntry(
+        slug_name="agentcore",
+        display_name="Agentcore Runtime",
+        module="exgentic.agents.agentcore.agentcore_agent",
+        attr="AgentcoreAgent",
+        kind="agent",
+    ),
     "tool_calling": RegistryEntry(
         slug_name="tool_calling",
         display_name="LiteLLM Tool Calling",

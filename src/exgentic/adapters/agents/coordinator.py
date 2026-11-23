@@ -18,6 +18,35 @@ from ...core.types import (
 )
 
 
+class _AgentTurnError(RuntimeError):
+    """The agent thread failed, re-raised on the harness thread.
+
+    A plain ``RuntimeError`` here would drop the *cause* an agent attached to
+    its own exceptions -- notably ``error_source``, which agents use to say
+    "this was infrastructure, not me". The harness reads that attribute to
+    label the session, so it has to survive the thread hand-off. Subclassing
+    ``RuntimeError`` keeps every existing ``except RuntimeError`` working.
+    """
+
+    def __init__(self, message: str, original: BaseException) -> None:
+        super().__init__(message)
+        self.original = original
+        # ``None`` when the agent does not classify its own failures, which
+        # leaves the harness's exception-type-based guess in charge.
+        self.error_source = getattr(original, "error_source", None)
+
+    def __reduce__(self):
+        """Survive the runner's pickle hop between the agent process and the
+        harness process.
+
+        Default exception pickling replays ``__init__(*self.args)``, but here
+        ``args`` is only the message -- reconstruction would fail on the missing
+        ``original``, the transport would fall back to rebuilding a builtin from
+        the type name, and ``error_source`` would be lost.
+        """
+        return (self.__class__, (self.args[0], self.original))
+
+
 class CoordinatedAgent(ABC):
     """Internal agent that runs inside an AgentCoordinator.
 
@@ -85,8 +114,12 @@ class AgentCoordinator(AgentInstance):
             self.internal_agent.run(self)
         except BaseException as exc:
             with self._condition:
-                self._agent_error = exc
-                self._agent_traceback = traceback.format_exc()
+                # Keep the first failure. A fatal recorded by ``record_fatal``
+                # is the one that explains the turn; the ``RuntimeError`` that
+                # ``execute(None)`` raises afterwards is only its echo.
+                if self._agent_error is None:
+                    self._agent_error = exc
+                    self._agent_traceback = traceback.format_exc()
                 self._closed = True
                 self._turn += 1
                 self._current_observation = None
@@ -96,11 +129,44 @@ class AgentCoordinator(AgentInstance):
         finally:
             self.close()
 
+    def record_fatal(self, error: BaseException) -> None:
+        """Publish a fatal agent-side failure *before* the turn is released.
+
+        A code agent ends every turn with ``execute(None)`` in a ``finally``, and
+        that call marks the coordinator closed and wakes the environment thread.
+        If the failure were only recorded afterwards -- which is what happens
+        when it simply propagates to ``_run_internal_agent`` -- the environment
+        thread could wake up, see ``_closed`` and no error, and read the turn as
+        "the agent finished". For a benchmark that is the difference between an
+        infrastructure error and a scored wrong answer.
+
+        Recording the error first, in the same critical section that marks the
+        coordinator closed, closes that window: any later ``react()``/``execute()``
+        raises instead of returning ``None``.
+        """
+        with self._condition:
+            if self._agent_error is None:
+                self._agent_error = error
+                self._agent_traceback = traceback.format_exc()
+            self._closed = True
+            self._turn += 1
+            self._current_observation = None
+            self._pending_actions.clear()
+            self._condition.notify_all()
+
     def _raise_if_agent_failed(self) -> None:
+        """Re-raise the agent thread's failure on this (the harness) thread.
+
+        The original exception is chained as ``__cause__`` so the harness can
+        classify it: ``AgentError`` marks a session error and is what makes
+        ``results.json`` say ``error`` instead of an ``unsuccessful`` score.
+        """
         if self._agent_error is not None:
             if isinstance(self._agent_error, Exception):
                 tb = self._agent_traceback or ""
-                raise RuntimeError(f"{self._agent_error}\n\n{tb}") from self._agent_error
+                raise _AgentTurnError(
+                    f"{self._agent_error}\n\n{tb}", self._agent_error
+                ) from self._agent_error
             raise RuntimeError("Internal agent failed") from self._agent_error
 
     def _flush_actions(self) -> Action | None:
@@ -249,11 +315,15 @@ class AgentCoordinator(AgentInstance):
         If action is None, signals agent termination.
         """
         with self._condition:
+            if self._closed and action is None:
+                # The agent's ``finally: execute(None)`` still runs after a
+                # recorded fatal. Treat it as the no-op it is; raising here
+                # would replace the real failure with an echo of it. ``react()``
+                # is what surfaces the failure to the harness.
+                return None
             self._raise_if_agent_failed()
             if self._closed:
-                if action is not None:
-                    raise RuntimeError("execute() called after close()")
-                return None
+                raise RuntimeError("execute() called after close()")
 
             self.logger.info("Received action (turn=%s): %s", self._turn, action)
             self._pending_actions.append(action)
