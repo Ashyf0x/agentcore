@@ -25,4 +25,4 @@ Caveats:
 
 - tau2 counts one attempt per task (the last attempt when a task was retried); infrastructure failures are attributed separately and not scored as wrong answers.
 - On the same 168-task AppWorld `test_normal` set, the non on-demand configuration scored 55/168 (32.7%) — the on-demand figure is a same-task-set configuration comparison, not a generalization claim.
-- Per-run details: [`docs/v2-results/v2-summary.csv`](docs/v2-results/v2-summary.csv) and [`docs/v2-results/v2-data.json`](docs/v2-results/v2-data.json).
+- Per-run details: [`docs/results/v2-summary.csv`](docs/results/v2-summary.csv) and [`docs/results/v2-data.json`](docs/results/v2-data.json).

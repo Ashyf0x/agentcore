@@ -31,7 +31,7 @@ WSL 侧 `pytest tests/agents/test_agentcore_integration.py` → **14 passed, 1 s
 
 ### 1.2 数据：比文档记录的多 5 倍
 
-文档（`docs/v2-results/`）只覆盖 4 个 run / 335 会话。磁盘上实际有 **1796 个会话 / 38 个 run / 约 2.17 万条模型步**：
+仓库文档（`docs/results/`）现在覆盖 v3 的 5 个 run / 614 会话；磁盘上实际有 **1796 个会话 / 38 个 run / 约 2.17 万条模型步**：
 
 | run | 会话 | 成功 | 成功步数 | 带 reasoning |
 |---|---:|---:|---:|---:|
