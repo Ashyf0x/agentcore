@@ -1,137 +1,131 @@
 {
-  "appworld-dev": {
-    "counts": {
-      "planned": 57,
-      "executed": 57,
-      "success": 24,
-      "unsuccessful": 14,
-      "unfinished": 15,
-      "error": 4,
-      "model": "openai/qwen3.8-reasoner"
-    },
-    "steps_median": 26,
-    "steps_max": 100,
-    "duration": {
-      "median_min": 4.37,
-      "p90_min": 8.74,
-      "max_min": 16.12,
-      "total_min": 273.0,
-      "top10pct_time_share_pct": 20.9
-    },
-    "model_timeout": 900,
-    "http_timeout": 600,
-    "error_source_stored": {
-      "agent": 3,
-      "infra": 1
-    },
-    "error_class_recomputed": {
-      "infra": 4
-    }
+ "airline": {
+  "counts": {
+   "planned": 50,
+   "executed": 50,
+   "success": 34,
+   "unsuccessful": 16,
+   "unfinished": 0,
+   "error": 0,
+   "model": "openai/qwen3.8-reasoner"
   },
-  "airline": {
-    "counts": {
-      "planned": 50,
-      "executed": 50,
-      "success": 32,
-      "unsuccessful": 15,
-      "unfinished": 0,
-      "error": 3,
-      "model": "openai/qwen3.8-reasoner"
-    },
-    "steps_median": 10.0,
-    "steps_max": 28,
-    "duration": {
-      "median_min": 4.49,
-      "p90_min": 10.69,
-      "max_min": 14.39,
-      "total_min": 265.1,
-      "top10pct_time_share_pct": 23.6
-    },
-    "model_timeout": 600,
-    "http_timeout": 600,
-    "error_source_stored": {
-      "agent": 2,
-      "infra": 1
-    },
-    "error_class_recomputed": {
-      "infra": 3
-    }
+  "steps_median": 11.0,
+  "steps_max": 28,
+  "duration": {
+   "median_min": 2.53,
+   "p90_min": 4.61,
+   "max_min": 6.7,
+   "total_min": 134.5,
+   "top10pct_time_share_pct": 20.6
   },
-  "retail": {
-    "counts": {
-      "planned": 114,
-      "executed": 114,
-      "success": 87,
-      "unsuccessful": 21,
-      "unfinished": 0,
-      "error": 6,
-      "model": "openai/qwen3.8-reasoner"
-    },
-    "steps_median": 11.0,
-    "steps_max": 21,
-    "duration": {
-      "median_min": 2.88,
-      "p90_min": 4.24,
-      "max_min": 12.0,
-      "total_min": 344.5,
-      "top10pct_time_share_pct": 20.9
-    },
-    "model_timeout": 600,
-    "http_timeout": 600,
-    "error_source_stored": {
-      "infra": 3,
-      "agent": 3
-    },
-    "error_class_recomputed": {
-      "infra": 6
-    }
+  "model_timeout": 600,
+  "http_timeout": 600
+ },
+ "retail": {
+  "counts": {
+   "planned": 114,
+   "executed": 114,
+   "success": 92,
+   "unsuccessful": 22,
+   "unfinished": 0,
+   "error": 0,
+   "model": "openai/qwen3.8-reasoner"
   },
-  "telecom": {
-    "counts": {
-      "planned": 114,
-      "executed": 114,
-      "success": 86,
-      "unsuccessful": 25,
-      "unfinished": 0,
-      "error": 3,
-      "model": "openai/qwen3.8-reasoner"
-    },
-    "steps_median": 11.5,
-    "steps_max": 26,
-    "duration": {
-      "median_min": 4.96,
-      "p90_min": 11.27,
-      "max_min": 23.24,
-      "total_min": 691.2,
-      "top10pct_time_share_pct": 24.4
-    },
-    "model_timeout": 600,
-    "http_timeout": 600,
-    "error_source_stored": {
-      "agent": 2,
-      "infra": 1
-    },
-    "error_class_recomputed": {
-      "infra": 3
-    }
+  "steps_median": 11.0,
+  "steps_max": 25,
+  "duration": {
+   "median_min": 1.76,
+   "p90_min": 3.13,
+   "max_min": 4.52,
+   "total_min": 223.1,
+   "top10pct_time_share_pct": 18.2
   },
-  "_totals": {
-    "executed": 335,
-    "success": 229,
-    "unsuccessful": 75,
-    "unfinished": 15,
-    "error": 16,
-    "success_rate_pct": 68.36,
-    "error_rate_pct": 4.78,
-    "wall_clock_total_min_serial": 1574.0,
-    "error_breakdown_by_text": {
-      "context_budget": 1,
-      "protocol_error": 2,
-      "transport_timeout": 9,
-      "model_http": 4
-    },
-    "note_distinct_task_ids": 285,
-    "note_cross_run_shared_task_ids": 50,
-    "note_cross_run_shared_between": "airline,retail"
+  "model_timeout": 600,
+  "http_timeout": 600
+ },
+ "telecom": {
+  "counts": {
+   "planned": 114,
+   "executed": 114,
+   "success": 99,
+   "unsuccessful": 15,
+   "unfinished": 0,
+   "error": 0,
+   "model": "openai/qwen3.8-reasoner"
+  },
+  "steps_median": 12.0,
+  "steps_max": 24,
+  "duration": {
+   "median_min": 3.55,
+   "p90_min": 9.03,
+   "max_min": 20.01,
+   "total_min": 516.6,
+   "top10pct_time_share_pct": 26.6
+  },
+  "model_timeout": 600,
+  "http_timeout": 600
+ },
+ "appworld-test_normal": {
+  "counts": {
+   "planned": 168,
+   "executed": 168,
+   "success": 55,
+   "unsuccessful": 47,
+   "unfinished": 57,
+   "error": 9,
+   "model": "openai/qwen3.8-reasoner"
+  },
+  "steps_median": 25.5,
+  "steps_max": 100,
+  "duration": {
+   "median_min": 6.28,
+   "p90_min": 13.58,
+   "max_min": 18.38,
+   "total_min": 1194.6,
+   "top10pct_time_share_pct": 21.4
+  },
+  "model_timeout": 900,
+  "http_timeout": 600
+ },
+ "appworld-test_normal-ondemand": {
+  "counts": {
+   "planned": 168,
+   "executed": 168,
+   "success": 147,
+   "unsuccessful": 15,
+   "unfinished": 6,
+   "error": 0,
+   "model": "openai/qwen3.8-reasoner"
+  },
+  "steps_median": 26.5,
+  "steps_max": 100,
+  "duration": {
+   "median_min": 3.45,
+   "p90_min": 6.22,
+   "max_min": 10.13,
+   "total_min": 647.9,
+   "top10pct_time_share_pct": 19.1
+  },
+  "model_timeout": 900,
+  "http_timeout": 600
+ },
+ "_totals": {
+  "counts": {
+   "planned": 614,
+   "executed": 614,
+   "success": 427,
+   "unsuccessful": 115,
+   "unfinished": 63,
+   "error": 9
+  },
+  "success_rate_pct": 69.54,
+  "error_rate_pct": 1.47,
+  "duration": {
+   "median_min": 3.26,
+   "p90_min": 9.36,
+   "max_min": 20.014,
+   "total_min": 2716.7,
+   "top10pct_time_share_pct": 28.7
   }
+ }
 }
